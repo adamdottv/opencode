@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"github.com/sst/opencode/internal/config"
 	"os"
 	"os/exec"
 	"slices"
@@ -221,14 +222,22 @@ func (m *editorCmp) View() string {
 		Bold(true).
 		Foreground(t.Primary())
 
+	// Only show textarea if setup is complete
+	prefix := ""
+	textarea := ""
+	if config.IsSetupComplete() {
+		prefix = style.Render(">")
+		textarea = m.textarea.View()
+	}
+
 	if len(m.attachments) == 0 {
-		return lipgloss.JoinHorizontal(lipgloss.Top, style.Render(">"), m.textarea.View())
+		return lipgloss.JoinHorizontal(lipgloss.Top, prefix, textarea)
 	}
 	m.textarea.SetHeight(m.height - 1)
+
 	return lipgloss.JoinVertical(lipgloss.Top,
 		m.attachmentsContent(),
-		lipgloss.JoinHorizontal(lipgloss.Top, style.Render(">"),
-			m.textarea.View()),
+		lipgloss.JoinHorizontal(lipgloss.Top, prefix, textarea),
 	)
 }
 
