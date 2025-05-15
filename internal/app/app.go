@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"github.com/sst/opencode/internal/setup"
 	"maps"
 	"sync"
 	"time"
@@ -90,7 +91,7 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 	// Initialize LSP clients in the background
 	go app.initLSPClients(ctx)
 
-	if !config.IsSetupComplete() {
+	if !setup.IsSetupComplete() {
 		app.PrimaryAgent, err = agent.NewSetupAgent()
 
 		if err != nil {
@@ -100,6 +101,15 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 
 		return app, nil
 	}
+
+	app.InitializePrimaryAgent()
+
+	return app, nil
+}
+
+// InitializePrimaryAgent initializes the primary agent with the necessary tools and services
+func (app *App) InitializePrimaryAgent() {
+	var err error
 
 	app.PrimaryAgent, err = agent.NewAgent(
 		config.AgentPrimary,
@@ -113,12 +123,11 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 			app.LSPClients,
 		),
 	)
-	if err != nil {
-		slog.Error("Failed to create primary agent", "error", err)
-		return nil, err
-	}
 
-	return app, nil
+	if err != nil {
+		slog.Error("Failed to initialize primary agent", err)
+		panic(err)
+	}
 }
 
 // initTheme sets the application theme based on the configuration

@@ -16,15 +16,6 @@ type ProjectInitFlag struct {
 	Initialized bool `json:"initialized"`
 }
 
-// IsSetupComplete checks if the setup is complete
-func IsSetupComplete() bool {
-	if cfg == nil {
-		return false
-	}
-
-	return cfg.SetupComplete
-}
-
 // ShouldShowInitDialog checks if the initialization dialog should be shown for the current directory
 func ShouldShowInitDialog() (bool, error) {
 	if cfg == nil {

@@ -2,7 +2,7 @@ package chat
 
 import (
 	"fmt"
-	"github.com/sst/opencode/internal/config"
+	"github.com/sst/opencode/internal/setup"
 	"os"
 	"os/exec"
 	"slices"
@@ -225,7 +225,7 @@ func (m *editorCmp) View() string {
 	// Only show textarea if setup is complete
 	prefix := ""
 	textarea := ""
-	if config.IsSetupComplete() {
+	if setup.IsSetupComplete() {
 		prefix = style.Render(">")
 		textarea = m.textarea.View()
 	}

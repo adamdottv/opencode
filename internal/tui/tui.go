@@ -3,8 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
-	"github.com/sst/opencode/internal/llm/agent"
-	"github.com/sst/opencode/internal/llm/models"
+	"github.com/sst/opencode/internal/setup"
 	"log/slog"
 	"strings"
 
@@ -170,9 +169,12 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.themeDialog.Init()
 	cmds = append(cmds, cmd)
 
+	// Checks config to see if setup is complete
+	setup.Init()
+
 	// Check if we should show the setup or init dialog
 	cmds = append(cmds, func() tea.Msg {
-		if !config.IsSetupComplete() {
+		if !setup.IsSetupComplete() {
 			return dialog.ShowSetupDialogMsg{Show: true}
 		}
 
@@ -295,57 +297,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseSetupDialogMsg:
 		a.showSetupDialog = false
 
-		err := config.Update(func(cfg *config.Config) {
-			// Add Agent
-			if cfg.Agents == nil {
-				cfg.Agents = make(map[config.AgentName]config.Agent)
-			}
-			cfg.Agents[config.AgentPrimary] = config.Agent{
-				Model:     msg.Model.ID,
-				MaxTokens: msg.Model.DefaultMaxTokens,
-			}
-			cfg.Agents[config.AgentTitle] = config.Agent{
-				Model:     msg.Model.ID,
-				MaxTokens: 80,
-			}
-			cfg.Agents[config.AgentTask] = config.Agent{
-				Model:     msg.Model.ID,
-				MaxTokens: msg.Model.DefaultMaxTokens,
-			}
+		// Complete setup
+		setup.CompleteSetup(msg.Provider, msg.Model, msg.APIKey)
 
-			// Add Provider
-			if cfg.Providers == nil {
-				cfg.Providers = make(map[models.ModelProvider]config.Provider)
-			}
-
-			cfg.Providers[msg.Provider] = config.Provider{
-				APIKey: msg.APIKey,
-			}
-
-			cfg.SetupComplete = true
-		})
-		if err != nil {
-			slog.Debug("Failed to update config", "error", err)
-			panic(err)
-		}
-
-		// Reinitialize the agent
-		a.app.PrimaryAgent, err = agent.NewAgent(
-			config.AgentPrimary,
-			a.app.Sessions,
-			a.app.Messages,
-			agent.PrimaryAgentTools(
-				a.app.Permissions,
-				a.app.Sessions,
-				a.app.Messages,
-				a.app.History,
-				a.app.LSPClients,
-			),
-		)
-		if err != nil {
-			slog.Debug("Failed to initialize agent", "error", err)
-			panic(err)
-		}
+		// Reinitialize the primary agent
+		a.app.InitializePrimaryAgent()
 
 		// Show init dialog if project is not initialized
 		shouldShowInit, err := config.ShouldShowInitDialog()

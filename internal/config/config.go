@@ -75,17 +75,16 @@ type TUIConfig struct {
 
 // Config is the main configuration structure for the application.
 type Config struct {
-	Data          Data                              `json:"data"`
-	WorkingDir    string                            `json:"wd,omitempty"`
-	MCPServers    map[string]MCPServer              `json:"mcpServers,omitempty"`
-	Providers     map[models.ModelProvider]Provider `json:"providers,omitempty"`
-	LSP           map[string]LSPConfig              `json:"lsp,omitempty"`
-	Agents        map[AgentName]Agent               `json:"agents,omitempty"`
-	Debug         bool                              `json:"debug,omitempty"`
-	DebugLSP      bool                              `json:"debugLSP,omitempty"`
-	ContextPaths  []string                          `json:"contextPaths,omitempty"`
-	TUI           TUIConfig                         `json:"tui"`
-	SetupComplete bool                              `json:"setupComplete,omit"`
+	Data         Data                              `json:"data"`
+	WorkingDir   string                            `json:"wd,omitempty"`
+	MCPServers   map[string]MCPServer              `json:"mcpServers,omitempty"`
+	Providers    map[models.ModelProvider]Provider `json:"providers,omitempty"`
+	LSP          map[string]LSPConfig              `json:"lsp,omitempty"`
+	Agents       map[AgentName]Agent               `json:"agents,omitempty"`
+	Debug        bool                              `json:"debug,omitempty"`
+	DebugLSP     bool                              `json:"debugLSP,omitempty"`
+	ContextPaths []string                          `json:"contextPaths,omitempty"`
+	TUI          TUIConfig                         `json:"tui"`
 }
 
 // Application constants
@@ -125,11 +124,10 @@ func Load(workingDir string, debug bool, lvl *slog.LevelVar) (*Config, error) {
 	}
 
 	cfg = &Config{
-		WorkingDir:    workingDir,
-		MCPServers:    make(map[string]MCPServer),
-		Providers:     make(map[models.ModelProvider]Provider),
-		LSP:           make(map[string]LSPConfig),
-		SetupComplete: true,
+		WorkingDir: workingDir,
+		MCPServers: make(map[string]MCPServer),
+		Providers:  make(map[models.ModelProvider]Provider),
+		LSP:        make(map[string]LSPConfig),
 	}
 
 	configureViper()
@@ -165,7 +163,6 @@ func Load(workingDir string, debug bool, lvl *slog.LevelVar) (*Config, error) {
 	}
 
 	if cfg.Agents == nil {
-		cfg.SetupComplete = false
 		cfg.Agents = make(map[AgentName]Agent)
 	}
 
