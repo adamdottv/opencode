@@ -74,6 +74,15 @@ func AvailableModelsByProvider(provider models.ModelProvider) []models.Model {
 		models = append(models, model)
 	}
 
+	// Sort models by alphabetical order
+	for i := 0; i < len(models)-1; i++ {
+		for j := i + 1; j < len(models); j++ {
+			if models[i].Name > models[j].Name {
+				models[i], models[j] = models[j], models[i]
+			}
+		}
+	}
+
 	return models
 }
 
