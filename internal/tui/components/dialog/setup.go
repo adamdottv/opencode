@@ -136,125 +136,125 @@ var setupKeys = setupMapping{
 	),
 }
 
-func (q *setupDialogCmp) Init() tea.Cmd {
+func (s *setupDialogCmp) Init() tea.Cmd {
 	return tea.Batch(textinput.Blink)
 }
 
-func (q *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (s *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case cursor.BlinkMsg:
-		if q.step == InputApiKey {
+		if s.step == InputApiKey {
 			// textinput.Update() does not work to make the cursor blink
 			// we need to manually toggle the blink state
-			q.textInput.Cursor.Blink = !q.textInput.Cursor.Blink
-			return q, nil
+			s.textInput.Cursor.Blink = !s.textInput.Cursor.Blink
+			return s, nil
 		}
 	case tea.KeyMsg:
-		if q.step == Start && key.Matches(msg, setupKeys.Enter) {
-			q.step = SelectProvider
-			return q, nil
+		if s.step == Start && key.Matches(msg, setupKeys.Enter) {
+			s.step = SelectProvider
+			return s, nil
 		}
 
-		if q.step == SelectProvider {
+		if s.step == SelectProvider {
 			switch {
 			case key.Matches(msg, setupKeys.Up):
-				q.selectedProviderIdx--
-				if q.selectedProviderIdx < 0 {
-					q.selectedProviderIdx = len(q.providers) - 1
+				s.selectedProviderIdx--
+				if s.selectedProviderIdx < 0 {
+					s.selectedProviderIdx = len(s.providers) - 1
 				}
 			case key.Matches(msg, setupKeys.Down):
-				q.selectedProviderIdx++
-				if q.selectedProviderIdx >= len(q.providers) {
-					q.selectedProviderIdx = 0
+				s.selectedProviderIdx++
+				if s.selectedProviderIdx >= len(s.providers) {
+					s.selectedProviderIdx = 0
 				}
 			case key.Matches(msg, setupKeys.Enter):
-				q.models = AvailableModelsByProvider(q.providers[q.selectedProviderIdx])
-				q.step = SelectModel
+				s.models = AvailableModelsByProvider(s.providers[s.selectedProviderIdx])
+				s.step = SelectModel
 			case key.Matches(msg, setupKeys.Escape):
-				q.step = Start
+				s.step = Start
 			}
 
-			return q, nil
+			return s, nil
 		}
 
-		if q.step == SelectModel {
+		if s.step == SelectModel {
 			switch {
 			case key.Matches(msg, setupKeys.Up):
-				q.selectedModelIdx--
-				if q.selectedModelIdx < 0 {
-					q.selectedModelIdx = len(q.providers) - 1
+				s.selectedModelIdx--
+				if s.selectedModelIdx < 0 {
+					s.selectedModelIdx = len(s.providers) - 1
 				}
 			case key.Matches(msg, setupKeys.Down):
-				q.selectedModelIdx++
-				if q.selectedModelIdx >= len(q.providers) {
-					q.selectedProviderIdx = 0
+				s.selectedModelIdx++
+				if s.selectedModelIdx >= len(s.providers) {
+					s.selectedProviderIdx = 0
 				}
 			case key.Matches(msg, setupKeys.Enter):
-				q.step = InputApiKey
-				q.textInput.Focus()
+				s.step = InputApiKey
+				s.textInput.Focus()
 			case key.Matches(msg, setupKeys.Escape):
-				q.selectedModelIdx = 0
-				q.step = SelectProvider
+				s.selectedModelIdx = 0
+				s.step = SelectProvider
 			}
 
-			return q, nil
+			return s, nil
 		}
 
-		if q.step == InputApiKey {
+		if s.step == InputApiKey {
 			switch {
 			case key.Matches(msg, setupKeys.Escape):
-				q.step = SelectModel
+				s.step = SelectModel
 
 			case key.Matches(msg, setupKeys.Enter):
-				if q.textInput.Value() == "" {
-					q.textInputError = "Field cannot be empty"
-					return q, nil
+				if s.textInput.Value() == "" {
+					s.textInputError = "Field cannot be empty"
+					return s, nil
 				}
 
-				return q, util.CmdHandler(CloseSetupDialogMsg{
-					Provider: q.providers[q.selectedProviderIdx],
-					Model:    q.models[q.selectedModelIdx],
-					APIKey:   q.textInput.Value(),
+				return s, util.CmdHandler(CloseSetupDialogMsg{
+					Provider: s.providers[s.selectedProviderIdx],
+					Model:    s.models[s.selectedModelIdx],
+					APIKey:   s.textInput.Value(),
 				})
 			}
 
 			var cmd tea.Cmd
 			var cmds []tea.Cmd
 
-			q.textInput, cmd = q.textInput.Update(msg)
+			s.textInput, cmd = s.textInput.Update(msg)
 			cmds = append(cmds, cmd)
 
-			return q, tea.Batch(cmds...)
+			return s, tea.Batch(cmds...)
 		}
 	}
 
-	return q, nil
+	return s, nil
 }
 
-func (q *setupDialogCmp) View() string {
-	switch q.step {
+func (s *setupDialogCmp) View() string {
+	switch s.step {
 	default:
-		return q.RenderSetupStep()
+		return s.RenderSetupStep()
 	case Start:
-		return q.RenderSetupStep()
+		return s.RenderSetupStep()
 	case SelectProvider:
-		return q.RenderSelectProviderStep()
+		return s.RenderSelectProviderStep()
 	case SelectModel:
-		return q.RenderSelectModelStep()
+		return s.RenderSelectModelStep()
 	case InputApiKey:
-		return q.RenderInputApiKeyStep()
+		return s.RenderInputApiKeyStep()
 	}
 }
 
-func (q *setupDialogCmp) renderAndPadLine(text string, width int) string {
+func (s *setupDialogCmp) renderAndPadLine(text string, width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 	spacerStyle := baseStyle.Background(t.Background())
 	return text + spacerStyle.Render(strings.Repeat(" ", width-lipgloss.Width(text)))
 }
 
-func (q *setupDialogCmp) renderHelp() string {
-	// We have to render the help manually due to artifacting when using help.View(q.keys)
+func (s *setupDialogCmp) renderHelp() string {
+	// We have to render the help manually due to artifacting when using help.View(s.keys)
 	// this is a bug with the bubbletea/help package
 	t := theme.CurrentTheme()
 	sepStyle := styles.BaseStyle().Foreground(t.Primary())
@@ -263,10 +263,10 @@ func (q *setupDialogCmp) renderHelp() string {
 	keyStyle := styles.BaseStyle().Foreground(t.Text())
 	descStyle := styles.BaseStyle().Foreground(t.TextMuted())
 	space := styles.BaseStyle().Foreground(t.Background()).Render(" ")
-	key1 := keyStyle.Render(q.keys.Escape.Help().Key)
-	desc1 := descStyle.Render(q.keys.Escape.Help().Desc)
-	key2 := keyStyle.Render(q.keys.Enter.Help().Key)
-	desc2 := descStyle.Render(q.keys.Enter.Help().Desc)
+	key1 := keyStyle.Render(s.keys.Escape.Help().Key)
+	desc1 := descStyle.Render(s.keys.Escape.Help().Desc)
+	key2 := keyStyle.Render(s.keys.Enter.Help().Key)
+	desc2 := descStyle.Render(s.keys.Enter.Help().Desc)
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -280,7 +280,7 @@ func (q *setupDialogCmp) renderHelp() string {
 	)
 }
 
-func (q *setupDialogCmp) RenderSetupStep() string {
+func (s *setupDialogCmp) RenderSetupStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
@@ -311,13 +311,13 @@ func (q *setupDialogCmp) RenderSetupStep() string {
 	content := baseStyle.Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
-			q.renderAndPadLine(title, width),
+			s.renderAndPadLine(title, width),
 			"",
-			q.renderAndPadLine(line1, width),
+			s.renderAndPadLine(line1, width),
 			"",
-			q.renderAndPadLine(line2, width),
+			s.renderAndPadLine(line2, width),
 			"",
-			q.renderAndPadLine(line3, width),
+			s.renderAndPadLine(line3, width),
 			"",
 			buttons,
 		),
@@ -331,19 +331,19 @@ func (q *setupDialogCmp) RenderSetupStep() string {
 		Render(content)
 }
 
-func (q *setupDialogCmp) RenderSelectProviderStep() string {
+func (s *setupDialogCmp) RenderSelectProviderStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
 	// Calculate max width needed for provider names
 	maxWidth := 36
-	for _, providerName := range q.providers {
+	for _, providerName := range s.providers {
 		if len(providerName) > maxWidth {
 			maxWidth = len(providerName)
 		}
 	}
 
-	helpText := q.renderHelp()
+	helpText := s.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
 
@@ -354,18 +354,18 @@ func (q *setupDialogCmp) RenderSelectProviderStep() string {
 	}
 
 	// Build the provider list
-	providerItems := make([]string, 0, len(q.providers))
-	for i, provider := range q.providers {
+	providerItems := make([]string, 0, len(s.providers))
+	for i, provider := range s.providers {
 		itemStyle := baseStyle.Width(maxWidth)
 
-		if i == q.selectedProviderIdx {
+		if i == s.selectedProviderIdx {
 			itemStyle = itemStyle.
 				Background(t.Primary()).
 				Foreground(t.Background()).
 				Bold(true)
 		}
 
-		providerItems = append(providerItems, itemStyle.Padding(0, 1).Render(q.providerLabels[provider]))
+		providerItems = append(providerItems, itemStyle.Padding(0, 1).Render(s.providerLabels[provider]))
 	}
 
 	title := baseStyle.
@@ -392,19 +392,19 @@ func (q *setupDialogCmp) RenderSelectProviderStep() string {
 		Render(content)
 }
 
-func (q *setupDialogCmp) RenderSelectModelStep() string {
+func (s *setupDialogCmp) RenderSelectModelStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
 	// Calculate max width needed for model names
 	maxWidth := 36
-	for _, model := range q.models {
+	for _, model := range s.models {
 		if len(model.Name) > maxWidth {
 			maxWidth = len(model.Name)
 		}
 	}
 
-	helpText := q.renderHelp()
+	helpText := s.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
 
@@ -415,11 +415,11 @@ func (q *setupDialogCmp) RenderSelectModelStep() string {
 	}
 
 	// Build the model list
-	modelItems := make([]string, 0, len(q.models))
-	for i, model := range q.models {
+	modelItems := make([]string, 0, len(s.models))
+	for i, model := range s.models {
 		itemStyle := baseStyle.Width(maxWidth)
 
-		if i == q.selectedModelIdx {
+		if i == s.selectedModelIdx {
 			itemStyle = itemStyle.
 				Background(t.Primary()).
 				Foreground(t.Background()).
@@ -453,14 +453,14 @@ func (q *setupDialogCmp) RenderSelectModelStep() string {
 		Render(content)
 }
 
-func (q *setupDialogCmp) RenderInputApiKeyStep() string {
+func (s *setupDialogCmp) RenderInputApiKeyStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
 	// Calculate width needed for content
 	maxWidth := 60 // Width for explanation text
 
-	helpText := q.renderHelp()
+	helpText := s.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(60, helpWidth) // Limit width to avoid overflow
 
@@ -481,15 +481,15 @@ func (q *setupDialogCmp) RenderInputApiKeyStep() string {
 		Foreground(t.Text()).
 		Width(maxWidth).
 		Padding(1, 1).
-		Render(q.textInput.View())
+		Render(s.textInput.View())
 
 	errorStyle := baseStyle.Foreground(t.Error()).PaddingLeft(1)
 	errorText := ""
-	if q.textInputError != "" {
-		errorText = errorStyle.Render(q.renderAndPadLine(q.textInputError, maxWidth-1))
+	if s.textInputError != "" {
+		errorText = errorStyle.Render(s.renderAndPadLine(s.textInputError, maxWidth-1))
 	}
 
-	maxWidth = min(maxWidth, q.width-10)
+	maxWidth = min(maxWidth, s.width-10)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -508,7 +508,7 @@ func (q *setupDialogCmp) RenderInputApiKeyStep() string {
 		Render(content)
 }
 
-func (q *setupDialogCmp) BindingKeys() []key.Binding {
+func (s *setupDialogCmp) BindingKeys() []key.Binding {
 	return layout.KeyMapToSlice(setupKeys)
 }
 
