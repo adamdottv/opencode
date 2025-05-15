@@ -2,7 +2,6 @@ package dialog
 
 import (
 	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -99,7 +98,6 @@ const (
 type setupDialogCmp struct {
 	currentModel        string
 	currentProvider     string
-	help                help.Model
 	keys                setupMapping
 	models              []models.Model
 	providers           []models.ModelProvider
@@ -117,14 +115,6 @@ type setupMapping struct {
 	Down   key.Binding
 	Enter  key.Binding
 	Escape key.Binding
-}
-
-func (m setupMapping) ShortHelp() []key.Binding {
-	return []key.Binding{m.Escape, m.Enter}
-}
-
-func (m setupMapping) FullHelp() [][]key.Binding {
-	return [][]key.Binding{}
 }
 
 var setupKeys = setupMapping{
@@ -263,6 +253,33 @@ func (q *setupDialogCmp) renderAndPadLine(text string, width int) string {
 	return text + spacerStyle.Render(strings.Repeat(" ", width-lipgloss.Width(text)))
 }
 
+func (q *setupDialogCmp) renderHelp() string {
+	// We have to render the help manually due to artifacting when using help.View(q.keys)
+	// this is a bug with the bubbletea/help package
+	t := theme.CurrentTheme()
+	sepStyle := styles.BaseStyle().Foreground(t.Primary())
+	sep := sepStyle.Render(" • ")
+
+	keyStyle := styles.BaseStyle().Foreground(t.Text())
+	descStyle := styles.BaseStyle().Foreground(t.TextMuted())
+	space := styles.BaseStyle().Foreground(t.Background()).Render(" ")
+	key1 := keyStyle.Render(q.keys.Escape.Help().Key)
+	desc1 := descStyle.Render(q.keys.Escape.Help().Desc)
+	key2 := keyStyle.Render(q.keys.Enter.Help().Key)
+	desc2 := descStyle.Render(q.keys.Enter.Help().Desc)
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		key1,
+		space,
+		desc1,
+		sep,
+		key2,
+		space,
+		desc2,
+	)
+}
+
 func (q *setupDialogCmp) RenderSetupStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
@@ -277,7 +294,7 @@ func (q *setupDialogCmp) RenderSetupStep() string {
 
 	line1 := "✨ Welcome to OpenCode"
 	line2 := "Your AI-powered coding companion is almost ready!"
-	line3 := "Please complete setup by selecting a provider, model, and entering your API key."
+	line3 := "Let's get you set up with your preferred AI provider, model, and API key."
 
 	width := lipgloss.Width(line3)
 	remainingWidth := width - lipgloss.Width(buttons)
@@ -326,8 +343,7 @@ func (q *setupDialogCmp) RenderSelectProviderStep() string {
 		}
 	}
 
-	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
-	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpText := q.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
 
@@ -388,8 +404,7 @@ func (q *setupDialogCmp) RenderSelectModelStep() string {
 		}
 	}
 
-	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
-	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpText := q.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
 
@@ -445,8 +460,7 @@ func (q *setupDialogCmp) RenderInputApiKeyStep() string {
 	// Calculate width needed for content
 	maxWidth := 60 // Width for explanation text
 
-	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
-	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpText := q.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(60, helpWidth) // Limit width to avoid overflow
 
@@ -499,20 +513,8 @@ func (q *setupDialogCmp) BindingKeys() []key.Binding {
 }
 
 func NewSetupDialogCmp() SetupDialog {
-	textStyle := lipgloss.NewStyle()
-	separatorStyle := lipgloss.NewStyle()
-
-	help := help.New()
-	help.ShowAll = false
-	help.Styles.Ellipsis = textStyle
-	help.Styles.FullDesc = textStyle
-	help.Styles.FullKey = textStyle
-	help.Styles.FullSeparator = separatorStyle
-	help.Styles.ShortDesc = textStyle
-	help.Styles.ShortKey = textStyle
-	help.Styles.ShortSeparator = separatorStyle
-
 	t := theme.CurrentTheme()
+
 	ti := textinput.New()
 	ti.Placeholder = "Enter API Key..."
 	ti.Width = 56
@@ -524,7 +526,6 @@ func NewSetupDialogCmp() SetupDialog {
 	providers, providerLabels := AvailableProviders()
 
 	return &setupDialogCmp{
-		help:           help,
 		keys:           setupKeys,
 		providers:      providers,
 		providerLabels: providerLabels,
