@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/sst/opencode/internal/llm/agent"
+	"github.com/sst/opencode/internal/llm/models"
 	"log/slog"
 	"strings"
 
@@ -119,6 +121,9 @@ type appModel struct {
 	showSessionDialog bool
 	sessionDialog     dialog.SessionDialog
 
+	showSetupDialog bool
+	setupDialog     dialog.SetupDialog
+
 	showCommandDialog bool
 	commandDialog     dialog.CommandDialog
 	commands          []dialog.Command
@@ -152,6 +157,8 @@ func (a appModel) Init() tea.Cmd {
 	cmds = append(cmds, cmd)
 	cmd = a.sessionDialog.Init()
 	cmds = append(cmds, cmd)
+	cmd = a.setupDialog.Init()
+	cmds = append(cmds, cmd)
 	cmd = a.commandDialog.Init()
 	cmds = append(cmds, cmd)
 	cmd = a.modelDialog.Init()
@@ -163,14 +170,18 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.themeDialog.Init()
 	cmds = append(cmds, cmd)
 
-	// Check if we should show the init dialog
+	// Check if we should show the setup or init dialog
 	cmds = append(cmds, func() tea.Msg {
-		shouldShow, err := config.ShouldShowInitDialog()
+		if !config.IsSetupComplete() {
+			return dialog.ShowSetupDialogMsg{Show: true}
+		}
+
+		shouldShowInit, err := config.ShouldShowInitDialog()
 		if err != nil {
 			status.Error("Failed to check init status: " + err.Error())
 			return nil
 		}
-		return dialog.ShowInitDialogMsg{Show: shouldShow}
+		return dialog.ShowInitDialogMsg{Show: shouldShowInit}
 	})
 
 	return tea.Batch(cmds...)
@@ -280,6 +291,74 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case dialog.CloseSetupDialogMsg:
+		a.showSetupDialog = false
+
+		err := config.Update(func(cfg *config.Config) {
+			// Add Agent
+			if cfg.Agents == nil {
+				cfg.Agents = make(map[config.AgentName]config.Agent)
+			}
+			cfg.Agents[config.AgentPrimary] = config.Agent{
+				Model:     msg.Model.ID,
+				MaxTokens: msg.Model.DefaultMaxTokens,
+			}
+			cfg.Agents[config.AgentTitle] = config.Agent{
+				Model:     msg.Model.ID,
+				MaxTokens: 80,
+			}
+			cfg.Agents[config.AgentTask] = config.Agent{
+				Model:     msg.Model.ID,
+				MaxTokens: msg.Model.DefaultMaxTokens,
+			}
+
+			// Add Provider
+			if cfg.Providers == nil {
+				cfg.Providers = make(map[models.ModelProvider]config.Provider)
+			}
+
+			cfg.Providers[msg.Provider] = config.Provider{
+				APIKey: msg.APIKey,
+			}
+
+			cfg.SetupComplete = true
+		})
+		if err != nil {
+			slog.Debug("Failed to update config", "error", err)
+			panic(err)
+		}
+
+		// Reinitialize the agent
+		a.app.PrimaryAgent, err = agent.NewAgent(
+			config.AgentPrimary,
+			a.app.Sessions,
+			a.app.Messages,
+			agent.PrimaryAgentTools(
+				a.app.Permissions,
+				a.app.Sessions,
+				a.app.Messages,
+				a.app.History,
+				a.app.LSPClients,
+			),
+		)
+		if err != nil {
+			slog.Debug("Failed to initialize agent", "error", err)
+			panic(err)
+		}
+
+		// Show init dialog if project is not initialized
+		shouldShowInit, err := config.ShouldShowInitDialog()
+		if err != nil {
+			status.Error("Failed to check init status: " + err.Error())
+			return a, nil
+		}
+		if shouldShowInit {
+			a.showInitDialog = true
+			return a, nil
+		}
+
+		return a, nil
+
 	case dialog.CloseCommandDialogMsg:
 		a.showCommandDialog = false
 		return a, nil
@@ -312,6 +391,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dialog.ShowInitDialogMsg:
 		a.showInitDialog = msg.Show
+		return a, nil
+
+	case dialog.ShowSetupDialogMsg:
+		a.showSetupDialog = msg.Show
 		return a, nil
 
 	case dialog.CloseInitDialogMsg:
@@ -384,6 +467,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if a.showSessionDialog {
 				a.showSessionDialog = false
+			}
+			if a.showSetupDialog {
+				a.showSetupDialog = false
 			}
 			if a.showCommandDialog {
 				a.showCommandDialog = false
@@ -549,6 +635,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, sessionCmd := a.sessionDialog.Update(msg)
 		a.sessionDialog = d.(dialog.SessionDialog)
 		cmds = append(cmds, sessionCmd)
+		// Only block key messages send all other messages down
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return a, tea.Batch(cmds...)
+		}
+	}
+
+	if a.showSetupDialog {
+		d, setupCmd := a.setupDialog.Update(msg)
+		a.setupDialog = d.(dialog.SetupDialog)
+		cmds = append(cmds, setupCmd)
 		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
@@ -744,6 +840,21 @@ func (a appModel) View() string {
 		)
 	}
 
+	if a.showSetupDialog {
+		overlay := a.setupDialog.View()
+		row := lipgloss.Height(appView) / 2
+		row -= lipgloss.Height(overlay) / 2
+		col := lipgloss.Width(appView) / 2
+		col -= lipgloss.Width(overlay) / 2
+		appView = layout.PlaceOverlay(
+			col,
+			row,
+			overlay,
+			appView,
+			true,
+		)
+	}
+
 	if a.showModelDialog {
 		overlay := a.modelDialog.View()
 		row := lipgloss.Height(appView) / 2
@@ -827,6 +938,7 @@ func New(app *app.App) tea.Model {
 		help:          dialog.NewHelpCmp(),
 		quit:          dialog.NewQuitCmp(),
 		sessionDialog: dialog.NewSessionDialogCmp(),
+		setupDialog:   dialog.NewSetupDialogCmp(),
 		commandDialog: dialog.NewCommandDialogCmp(),
 		modelDialog:   dialog.NewModelDialogCmp(),
 		permissions:   dialog.NewPermissionDialogCmp(),

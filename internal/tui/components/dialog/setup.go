@@ -1,0 +1,516 @@
+package dialog
+
+import (
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/sst/opencode/internal/llm/models"
+	"github.com/sst/opencode/internal/tui/layout"
+	"github.com/sst/opencode/internal/tui/styles"
+	"github.com/sst/opencode/internal/tui/theme"
+	"github.com/sst/opencode/internal/tui/util"
+	"strings"
+)
+
+type SetupDialog interface {
+	tea.Model
+	layout.Bindings
+}
+
+// AvailableProviders returns a list of all available providers
+func AvailableProviders() ([]models.ModelProvider, map[models.ModelProvider]string) {
+	providerLabels := make(map[models.ModelProvider]string)
+	providerLabels[models.ProviderAnthropic] = "Anthropic"
+	providerLabels[models.ProviderAzure] = "Azure"
+	providerLabels[models.ProviderBedrock] = "Bedrock"
+	providerLabels[models.ProviderGemini] = "Gemini"
+	providerLabels[models.ProviderGROQ] = "Groq"
+	providerLabels[models.ProviderOpenAI] = "OpenAI"
+	providerLabels[models.ProviderOpenRouter] = "OpenRouter"
+	providerLabels[models.ProviderXAI] = "xAI"
+
+	providerList := make([]models.ModelProvider, 0, len(providerLabels))
+	providerList = append(providerList, models.ProviderAnthropic)
+	providerList = append(providerList, models.ProviderAzure)
+	providerList = append(providerList, models.ProviderBedrock)
+	providerList = append(providerList, models.ProviderGemini)
+	providerList = append(providerList, models.ProviderGROQ)
+	providerList = append(providerList, models.ProviderOpenAI)
+	providerList = append(providerList, models.ProviderOpenRouter)
+	providerList = append(providerList, models.ProviderXAI)
+
+	return providerList, providerLabels
+}
+
+// AvailableModelsByProvider returns a list of all available models by provider
+func AvailableModelsByProvider(provider models.ModelProvider) []models.Model {
+	var modelMap map[models.ModelID]models.Model
+
+	switch provider {
+	default:
+		modelMap = map[models.ModelID]models.Model{}
+	case models.ProviderAnthropic:
+		modelMap = models.AnthropicModels
+	case models.ProviderAzure:
+		modelMap = models.AzureModels
+	case models.ProviderBedrock:
+		modelMap = models.BedrockModels
+	case models.ProviderGemini:
+		modelMap = models.GeminiModels
+	case models.ProviderGROQ:
+		modelMap = models.GroqModels
+	case models.ProviderOpenAI:
+		modelMap = models.OpenAIModels
+	case models.ProviderOpenRouter:
+		modelMap = models.OpenRouterModels
+	case models.ProviderXAI:
+		modelMap = models.XAIModels
+	}
+
+	models := make([]models.Model, 0, len(modelMap))
+	for _, model := range modelMap {
+		models = append(models, model)
+	}
+
+	return models
+}
+
+type SetupStep string
+
+const (
+	Start          SetupStep = "start"
+	SelectProvider SetupStep = "select-provider"
+	SelectModel    SetupStep = "select-model"
+	InputApiKey    SetupStep = "input-api-key"
+)
+
+type setupDialogCmp struct {
+	currentModel        string
+	currentProvider     string
+	help                help.Model
+	keys                setupMapping
+	models              []models.Model
+	providers           []models.ModelProvider
+	providerLabels      map[models.ModelProvider]string
+	selectedModelIdx    int
+	selectedProviderIdx int
+	step                SetupStep
+	textInput           textinput.Model
+	width               int
+}
+
+type setupMapping struct {
+	Up     key.Binding
+	Down   key.Binding
+	Enter  key.Binding
+	Escape key.Binding
+}
+
+func (m setupMapping) ShortHelp() []key.Binding {
+	return []key.Binding{m.Escape, m.Enter}
+}
+
+func (m setupMapping) FullHelp() [][]key.Binding {
+	return [][]key.Binding{}
+}
+
+var setupKeys = setupMapping{
+	Up: key.NewBinding(
+		key.WithKeys("up"),
+		key.WithHelp("↑", "prev"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down"),
+		key.WithHelp("↓", "next"),
+	),
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("↵", "next"),
+	),
+	Escape: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "back"),
+	),
+}
+
+func (q *setupDialogCmp) Init() tea.Cmd {
+	return nil
+}
+
+func (q *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if q.step == Start && key.Matches(msg, setupKeys.Enter) {
+			q.step = SelectProvider
+			return q, nil
+		}
+
+		if q.step == SelectProvider {
+			switch {
+			case key.Matches(msg, setupKeys.Up):
+				q.selectedProviderIdx--
+				if q.selectedProviderIdx < 0 {
+					q.selectedProviderIdx = len(q.providers) - 1
+				}
+			case key.Matches(msg, setupKeys.Down):
+				q.selectedProviderIdx++
+				if q.selectedProviderIdx >= len(q.providers) {
+					q.selectedProviderIdx = 0
+				}
+			case key.Matches(msg, setupKeys.Enter):
+				q.models = AvailableModelsByProvider(q.providers[q.selectedProviderIdx])
+				q.step = SelectModel
+			case key.Matches(msg, setupKeys.Escape):
+				q.step = Start
+			}
+
+			return q, nil
+		}
+
+		if q.step == SelectModel {
+			switch {
+			case key.Matches(msg, setupKeys.Up):
+				q.selectedModelIdx--
+				if q.selectedModelIdx < 0 {
+					q.selectedModelIdx = len(q.providers) - 1
+				}
+			case key.Matches(msg, setupKeys.Down):
+				q.selectedModelIdx++
+				if q.selectedModelIdx >= len(q.providers) {
+					q.selectedProviderIdx = 0
+				}
+			case key.Matches(msg, setupKeys.Enter):
+				q.step = InputApiKey
+				q.textInput.Focus()
+			case key.Matches(msg, setupKeys.Escape):
+				q.selectedModelIdx = 0
+				q.step = SelectProvider
+			}
+
+			return q, nil
+		}
+
+		if q.step == InputApiKey {
+			switch {
+			case key.Matches(msg, setupKeys.Escape):
+				q.step = SelectModel
+
+			case key.Matches(msg, setupKeys.Enter):
+				return q, util.CmdHandler(CloseSetupDialogMsg{
+					Provider: q.providers[q.selectedProviderIdx],
+					Model:    q.models[q.selectedModelIdx],
+					APIKey:   q.textInput.Value(),
+				})
+			}
+
+			var cmd tea.Cmd
+			var cmds []tea.Cmd
+
+			q.textInput, cmd = q.textInput.Update(msg)
+			cmds = append(cmds, cmd)
+
+			return q, tea.Batch(cmds...)
+		}
+	}
+
+	return q, nil
+}
+
+func (q *setupDialogCmp) View() string {
+	switch q.step {
+	default:
+		return q.RenderSetupStep()
+	case Start:
+		return q.RenderSetupStep()
+	case SelectProvider:
+		return q.RenderSelectProviderStep()
+	case SelectModel:
+		return q.RenderSelectModelStep()
+	case InputApiKey:
+		return q.RenderInputApiKeyStep()
+	}
+}
+
+func (q *setupDialogCmp) renderAndPadLine(text string, width int) string {
+	t := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle()
+	spacerStyle := baseStyle.Background(t.Background())
+	return text + spacerStyle.Render(strings.Repeat(" ", width-lipgloss.Width(text)))
+}
+
+func (q *setupDialogCmp) RenderSetupStep() string {
+	t := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle()
+
+	nextStyle := baseStyle
+	nextStyle = nextStyle.Background(t.Primary()).Foreground(t.Background())
+	spacerStyle := baseStyle.Background(t.Background())
+
+	nextButton := nextStyle.Padding(0, 1).Render("Proceed")
+
+	buttons := lipgloss.JoinHorizontal(lipgloss.Left, nextButton)
+
+	line1 := "✨ Welcome to OpenCode"
+	line2 := "Your AI-powered coding companion is almost ready!"
+	line3 := "Please complete setup by selecting a provider, model, and entering your API key."
+
+	width := lipgloss.Width(line3)
+	remainingWidth := width - lipgloss.Width(buttons)
+	if remainingWidth > 0 {
+		buttons = spacerStyle.Render(strings.Repeat(" ", remainingWidth)) + buttons
+	}
+
+	title := baseStyle.
+		Background(t.Background()).
+		Foreground(t.Primary()).
+		Bold(true).
+		Render("Setup Wizard")
+
+	content := baseStyle.Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			q.renderAndPadLine(title, width),
+			"",
+			q.renderAndPadLine(line1, width),
+			"",
+			q.renderAndPadLine(line2, width),
+			"",
+			q.renderAndPadLine(line3, width),
+			"",
+			buttons,
+		),
+	)
+
+	return baseStyle.Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(t.Background()).
+		BorderForeground(t.TextMuted()).
+		Width(lipgloss.Width(content) + 4).
+		Render(content)
+}
+
+func (q *setupDialogCmp) RenderSelectProviderStep() string {
+	t := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle()
+
+	// Calculate max width needed for provider names
+	maxWidth := 40 // Minimum width
+	for _, providerName := range q.providers {
+		if len(providerName) > maxWidth-4 { // Account for padding
+			maxWidth = len(providerName) + 4
+		}
+	}
+
+	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
+	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpWidth := lipgloss.Width(helpText)
+	maxWidth = max(30, min(maxWidth, q.width-15), helpWidth) // Limit width to avoid overflow
+
+	// Add padding to help
+	remainingWidth := maxWidth - lipgloss.Width(helpText)
+	if remainingWidth > 0 {
+		helpText = strings.Repeat(" ", remainingWidth) + helpText
+	}
+
+	// Build the provider list
+	providerItems := make([]string, 0, len(q.providers))
+	for i, provider := range q.providers {
+		itemStyle := baseStyle.Width(maxWidth)
+
+		if i == q.selectedProviderIdx {
+			itemStyle = itemStyle.
+				Background(t.Primary()).
+				Foreground(t.Background()).
+				Bold(true)
+		}
+
+		providerItems = append(providerItems, itemStyle.Padding(0, 1).Render(q.providerLabels[provider]))
+	}
+
+	title := baseStyle.
+		Foreground(t.Primary()).
+		Bold(true).
+		Width(maxWidth).
+		Padding(0, 1).
+		Render("Select Provider")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		baseStyle.Width(maxWidth).Render(""),
+		baseStyle.Width(maxWidth).Render(lipgloss.JoinVertical(lipgloss.Left, providerItems...)),
+		baseStyle.Width(maxWidth).Render("\n\n"),
+		baseStyle.Width(maxWidth).Render(helpText),
+	)
+
+	return baseStyle.Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(t.Background()).
+		BorderForeground(t.TextMuted()).
+		Width(lipgloss.Width(content) + 4).
+		Render(content)
+}
+
+func (q *setupDialogCmp) RenderSelectModelStep() string {
+	t := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle()
+
+	// Calculate max width needed for model names
+	maxWidth := 40 // Minimum width
+	for _, model := range q.models {
+		if len(model.Name) > maxWidth-4 { // Account for padding
+			maxWidth = len(model.Name) + 4
+		}
+	}
+
+	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
+	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpWidth := lipgloss.Width(helpText)
+	maxWidth = max(30, maxWidth, helpWidth) // Limit width to avoid overflow
+
+	// Add padding to help
+	remainingWidth := maxWidth - lipgloss.Width(helpText)
+	if remainingWidth > 0 {
+		helpText = strings.Repeat(" ", remainingWidth) + helpText
+	}
+
+	// Build the model list
+	modelItems := make([]string, 0, len(q.models))
+	for i, model := range q.models {
+		itemStyle := baseStyle.Width(maxWidth)
+
+		if i == q.selectedModelIdx {
+			itemStyle = itemStyle.
+				Background(t.Primary()).
+				Foreground(t.Background()).
+				Bold(true)
+		}
+
+		modelItems = append(modelItems, itemStyle.Padding(0, 1).Render(model.Name))
+	}
+
+	title := baseStyle.
+		Foreground(t.Primary()).
+		Bold(true).
+		Width(maxWidth).
+		Padding(0, 1).
+		Render("Select Model")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		baseStyle.Width(maxWidth).Render(""),
+		baseStyle.Width(maxWidth).Render(lipgloss.JoinVertical(lipgloss.Left, modelItems...)),
+		baseStyle.Width(maxWidth).Render("\n\n"),
+		baseStyle.Width(maxWidth).Render(helpText),
+	)
+
+	return baseStyle.Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(t.Background()).
+		BorderForeground(t.TextMuted()).
+		Width(lipgloss.Width(content) + 4).
+		Render(content)
+}
+
+func (q *setupDialogCmp) RenderInputApiKeyStep() string {
+	t := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle()
+
+	// Calculate width needed for content
+	maxWidth := 60 // Width for explanation text
+
+	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
+	helpText := helpStyle.Render(q.help.View(q.keys))
+	helpWidth := lipgloss.Width(helpText)
+	maxWidth = max(60, helpWidth) // Limit width to avoid overflow
+
+	// Add padding to help
+	remainingWidth := maxWidth - lipgloss.Width(helpText)
+	if remainingWidth > 0 {
+		helpText = strings.Repeat(" ", remainingWidth) + helpText
+	}
+
+	title := baseStyle.
+		Foreground(t.Primary()).
+		Bold(true).
+		Width(maxWidth).
+		Padding(0, 1).
+		Render("API Key")
+
+	inputField := baseStyle.
+		Foreground(t.Text()).
+		Width(maxWidth).
+		Padding(1, 1).
+		Render(q.textInput.View())
+
+	maxWidth = min(maxWidth, q.width-10)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		inputField,
+		baseStyle.Width(maxWidth).Render(helpText),
+	)
+
+	return baseStyle.Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(t.Background()).
+		BorderForeground(t.TextMuted()).
+		Background(t.Background()).
+		Width(lipgloss.Width(content) + 4).
+		Render(content)
+}
+
+func (q *setupDialogCmp) BindingKeys() []key.Binding {
+	return layout.KeyMapToSlice(setupKeys)
+}
+
+func NewSetupDialogCmp() SetupDialog {
+	textStyle := lipgloss.NewStyle()
+	separatorStyle := lipgloss.NewStyle()
+
+	help := help.New()
+	help.ShowAll = false
+	help.Styles.Ellipsis = textStyle
+	help.Styles.FullDesc = textStyle
+	help.Styles.FullKey = textStyle
+	help.Styles.FullSeparator = separatorStyle
+	help.Styles.ShortDesc = textStyle
+	help.Styles.ShortKey = textStyle
+	help.Styles.ShortSeparator = separatorStyle
+
+	t := theme.CurrentTheme()
+	ti := textinput.New()
+	ti.Placeholder = "Enter API Key..."
+	ti.Width = 56
+	ti.Prompt = ""
+	ti.PlaceholderStyle = ti.PlaceholderStyle.Background(t.Background())
+	ti.PromptStyle = ti.PromptStyle.Background(t.Background())
+	ti.TextStyle = ti.TextStyle.Background(t.Background())
+
+	providers, providerLabels := AvailableProviders()
+
+	return &setupDialogCmp{
+		help:           help,
+		keys:           setupKeys,
+		providers:      providers,
+		providerLabels: providerLabels,
+		step:           Start,
+		textInput:      ti,
+	}
+}
+
+// CloseSetupDialogMsg is a message that is sent when the init dialog is closed.
+type CloseSetupDialogMsg struct {
+	APIKey   string
+	Model    models.Model
+	Provider models.ModelProvider
+}
+
+// ShowSetupDialogMsg is a message that is sent to show the init dialog.
+type ShowSetupDialogMsg struct {
+	Show bool
+}
