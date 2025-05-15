@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -107,6 +108,7 @@ type setupDialogCmp struct {
 	selectedProviderIdx int
 	step                SetupStep
 	textInput           textinput.Model
+	textInputError      string
 	width               int
 }
 
@@ -145,11 +147,18 @@ var setupKeys = setupMapping{
 }
 
 func (q *setupDialogCmp) Init() tea.Cmd {
-	return nil
+	return tea.Batch(textinput.Blink)
 }
 
 func (q *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case cursor.BlinkMsg:
+		if q.step == InputApiKey {
+			// textinput.Update() does not work to make the cursor blink
+			// we need to manually toggle the blink state
+			q.textInput.Cursor.Blink = !q.textInput.Cursor.Blink
+			return q, nil
+		}
 	case tea.KeyMsg:
 		if q.step == Start && key.Matches(msg, setupKeys.Enter) {
 			q.step = SelectProvider
@@ -207,6 +216,11 @@ func (q *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.step = SelectModel
 
 			case key.Matches(msg, setupKeys.Enter):
+				if q.textInput.Value() == "" {
+					q.textInputError = "Field cannot be empty"
+					return q, nil
+				}
+
 				return q, util.CmdHandler(CloseSetupDialogMsg{
 					Provider: q.providers[q.selectedProviderIdx],
 					Model:    q.models[q.selectedModelIdx],
@@ -455,12 +469,19 @@ func (q *setupDialogCmp) RenderInputApiKeyStep() string {
 		Padding(1, 1).
 		Render(q.textInput.View())
 
+	errorStyle := baseStyle.Foreground(t.Error()).PaddingLeft(1)
+	errorText := ""
+	if q.textInputError != "" {
+		errorText = errorStyle.Render(q.renderAndPadLine(q.textInputError, maxWidth-1))
+	}
+
 	maxWidth = min(maxWidth, q.width-10)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		inputField,
+		errorText,
 		baseStyle.Width(maxWidth).Render(helpText),
 	)
 

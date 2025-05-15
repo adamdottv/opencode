@@ -202,6 +202,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case cursor.BlinkMsg:
+		a.setupDialog.Update(msg)
 		return a.updateAllPages(msg)
 	case spinner.TickMsg:
 		return a.updateAllPages(msg)
