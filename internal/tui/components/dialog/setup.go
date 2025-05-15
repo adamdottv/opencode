@@ -319,17 +319,17 @@ func (q *setupDialogCmp) RenderSelectProviderStep() string {
 	baseStyle := styles.BaseStyle()
 
 	// Calculate max width needed for provider names
-	maxWidth := 40 // Minimum width
+	maxWidth := 36
 	for _, providerName := range q.providers {
-		if len(providerName) > maxWidth-4 { // Account for padding
-			maxWidth = len(providerName) + 4
+		if len(providerName) > maxWidth {
+			maxWidth = len(providerName)
 		}
 	}
 
 	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
 	helpText := helpStyle.Render(q.help.View(q.keys))
 	helpWidth := lipgloss.Width(helpText)
-	maxWidth = max(30, min(maxWidth, q.width-15), helpWidth) // Limit width to avoid overflow
+	maxWidth = max(maxWidth, helpWidth)
 
 	// Add padding to help
 	remainingWidth := maxWidth - lipgloss.Width(helpText)
@@ -381,17 +381,17 @@ func (q *setupDialogCmp) RenderSelectModelStep() string {
 	baseStyle := styles.BaseStyle()
 
 	// Calculate max width needed for model names
-	maxWidth := 40 // Minimum width
+	maxWidth := 36
 	for _, model := range q.models {
-		if len(model.Name) > maxWidth-4 { // Account for padding
-			maxWidth = len(model.Name) + 4
+		if len(model.Name) > maxWidth {
+			maxWidth = len(model.Name)
 		}
 	}
 
 	helpStyle := lipgloss.NewStyle().Foreground(t.TextMuted())
 	helpText := helpStyle.Render(q.help.View(q.keys))
 	helpWidth := lipgloss.Width(helpText)
-	maxWidth = max(30, maxWidth, helpWidth) // Limit width to avoid overflow
+	maxWidth = max(maxWidth, helpWidth)
 
 	// Add padding to help
 	remainingWidth := maxWidth - lipgloss.Width(helpText)
