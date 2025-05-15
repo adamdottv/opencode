@@ -359,7 +359,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If submitted, replace all named arguments and run the command
 		if msg.Submit {
 			content := msg.Content
-			
+
 			// Replace each named argument with its value
 			for name, value := range msg.Args {
 				placeholder := "$" + name
