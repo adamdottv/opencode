@@ -63,14 +63,14 @@ func NewSpinner(message string) *Spinner {
 	s.Style = s.Style.Foreground(s.Style.GetForeground())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	model := spinnerModel{
 		spinner: s,
 		message: message,
 	}
 
 	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr), tea.WithoutCatchPanics())
-	
+
 	return &Spinner{
 		model:  s,
 		done:   make(chan struct{}),

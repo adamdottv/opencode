@@ -6,7 +6,7 @@ import (
 
 func TestOutputFormat_IsValid(t *testing.T) {
 	t.Parallel()
-	
+
 	tests := []struct {
 		name   string
 		format OutputFormat
@@ -28,7 +28,7 @@ func TestOutputFormat_IsValid(t *testing.T) {
 			want:   false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
@@ -42,7 +42,7 @@ func TestOutputFormat_IsValid(t *testing.T) {
 
 func TestFormatOutput(t *testing.T) {
 	t.Parallel()
-	
+
 	tests := []struct {
 		name    string
 		content string
@@ -72,7 +72,7 @@ func TestFormatOutput(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {

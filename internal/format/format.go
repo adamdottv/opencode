@@ -11,7 +11,7 @@ type OutputFormat string
 const (
 	// TextFormat is plain text output (default)
 	TextFormat OutputFormat = "text"
-	
+
 	// JSONFormat is output wrapped in a JSON object
 	JSONFormat OutputFormat = "json"
 )
