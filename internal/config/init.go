@@ -16,6 +16,27 @@ type ProjectInitFlag struct {
 	Initialized bool `json:"initialized"`
 }
 
+// ShouldShowSetupDialog checks if the setup dialog should be shown
+func ShouldShowSetupDialog() bool {
+	if cfg == nil || len(cfg.Agents) < 1 {
+		return true
+	}
+
+	// Ensure primary agent is set
+	_, exists := cfg.Agents[AgentPrimary]
+	if !exists {
+		return true
+	}
+
+	// Ensure at least one provider is set
+	err := validateAgent(cfg, AgentPrimary, cfg.Agents[AgentPrimary])
+	if err != nil {
+		return true
+	}
+
+	return false
+}
+
 // ShouldShowInitDialog checks if the initialization dialog should be shown for the current directory
 func ShouldShowInitDialog() (bool, error) {
 	if cfg == nil {

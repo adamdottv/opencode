@@ -90,6 +90,17 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 	// Initialize LSP clients in the background
 	go app.initLSPClients(ctx)
 
+	if config.ShouldShowSetupDialog() {
+		app.PrimaryAgent, err = agent.NewSetupAgent()
+
+		if err != nil {
+			slog.Error("Failed to create setup agent", "error", err)
+			return nil, err
+		}
+
+		return app, nil
+	}
+
 	app.PrimaryAgent, err = agent.NewAgent(
 		config.AgentPrimary,
 		app.Sessions,
