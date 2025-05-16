@@ -424,9 +424,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.showMultiArgumentsDialog {
 				a.showMultiArgumentsDialog = false
 			}
+			if a.showToolsDialog {
+				a.showToolsDialog = false
+			}
 			return a, nil
 		case key.Matches(msg, keys.SwitchSession):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showModelDialog = false
+				a.showFilepicker = false
+				
 				// Load sessions and show the dialog
 				sessions, err := a.app.Sessions.List(context.Background())
 				if err != nil {
@@ -444,6 +453,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, keys.Commands):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showThemeDialog && !a.showFilepicker {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showModelDialog = false
+				
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -460,22 +473,39 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showFilepicker = false
+				
 				a.showModelDialog = true
 				return a, nil
 			}
 			return a, nil
 		case key.Matches(msg, keys.SwitchTheme):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showModelDialog = false
+				a.showFilepicker = false
+				
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
 		case key.Matches(msg, keys.Tools):
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && !a.showFilepicker {
-				// Get tool names dynamically
-				toolNames := getAvailableToolNames(a.app)
-				a.toolsDialog.SetTools(toolNames)
-				a.showToolsDialog = true
+			// Check if any other dialog is open
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
+			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
+			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
+			   !a.showMultiArgumentsDialog {
+				// Toggle tools dialog
+				a.showToolsDialog = !a.showToolsDialog
+				if a.showToolsDialog {
+					// Get tool names dynamically
+					toolNames := getAvailableToolNames(a.app)
+					a.toolsDialog.SetTools(toolNames)
+				}
 				return a, nil
 			}
 			return a, nil
@@ -485,6 +515,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, a.moveToPage(page.ChatPage)
 				}
 			} else if !a.filepicker.IsCWDFocused() {
+				if a.showToolsDialog {
+					a.showToolsDialog = false
+					return a, nil
+				}
 				if a.showQuit {
 					a.showQuit = !a.showQuit
 					return a, nil
@@ -519,6 +553,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
+			
+			// Close other dialogs if opening help
+			if a.showHelp {
+				a.showToolsDialog = false
+			}
 			return a, nil
 		case key.Matches(msg, helpEsc):
 			if a.app.PrimaryAgent.IsBusy() {
@@ -529,8 +568,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case key.Matches(msg, keys.Filepicker):
+			// Toggle filepicker
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
+			
+			// Close other dialogs if opening filepicker
+			if a.showFilepicker {
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showModelDialog = false
+				a.showCommandDialog = false
+				a.showSessionDialog = false
+			}
 			return a, nil
 		}
 

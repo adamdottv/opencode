@@ -111,12 +111,19 @@ func (m *toolsDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, toolsKeys.Escape):
 			return m, func() tea.Msg { return CloseToolsDialogMsg{} }
+		// Pass other key messages to the list component
+		default:
+			var cmd tea.Cmd
+			listModel, cmd := m.list.Update(msg)
+			m.list = listModel.(utilComponents.SimpleList[toolItem])
+			return m, cmd
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 	}
 
+	// For non-key messages
 	var cmd tea.Cmd
 	listModel, cmd := m.list.Update(msg)
 	m.list = listModel.(utilComponents.SimpleList[toolItem])
