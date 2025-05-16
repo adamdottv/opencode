@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -149,6 +150,11 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dialog.ThemeChangedMsg:
 		m.textarea = CreateTextArea(&m.textarea)
+	case dialog.CompletionSelectedMsg:
+		existingValue := m.textarea.Value()
+		modifiedValue := strings.Replace(existingValue, msg.SearchString, msg.CompletionValue, 1)
+
+		m.textarea.SetValue(modifiedValue)
 		return m, nil
 	case dialog.AttachmentAddedMsg:
 		if len(m.attachments) >= maxAttachments {
@@ -246,7 +252,6 @@ func (m *editorCmp) SetSize(width, height int) tea.Cmd {
 	m.height = height
 	m.textarea.SetWidth(width - 3) // account for the prompt and padding right
 	m.textarea.SetHeight(height)
-	m.textarea.SetWidth(width)
 	return nil
 }
 

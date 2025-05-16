@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/config"
+	"github.com/sst/opencode/internal/llm/agent"
 	"github.com/sst/opencode/internal/logging"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/permission"
@@ -39,6 +40,7 @@ type keyMap struct {
 	Filepicker    key.Binding
 	Models        key.Binding
 	SwitchTheme   key.Binding
+	Tools         key.Binding
 }
 
 const (
@@ -81,6 +83,11 @@ var keys = keyMap{
 	SwitchTheme: key.NewBinding(
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("ctrl+t", "switch theme"),
+	),
+	
+	Tools: key.NewBinding(
+		key.WithKeys("f9"),
+		key.WithHelp("f9", "show available tools"),
 	),
 }
 
@@ -139,8 +146,11 @@ type appModel struct {
 	showThemeDialog bool
 	themeDialog     dialog.ThemeDialog
 
-	showArgumentsDialog bool
-	argumentsDialog     dialog.ArgumentsDialogCmp
+	showMultiArgumentsDialog bool
+	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
+	
+	showToolsDialog bool
+	toolsDialog     dialog.ToolsDialog
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -167,6 +177,8 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.filepicker.Init()
 	cmds = append(cmds, cmd)
 	cmd = a.themeDialog.Init()
+	cmds = append(cmds, cmd)
+	cmd = a.toolsDialog.Init()
 	cmds = append(cmds, cmd)
 
 	// Checks config to see if setup is complete
@@ -210,7 +222,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateAllPages(msg)
 
 	case tea.WindowSizeMsg:
-		msg.Height -= 1 // Make space for the status bar
+		msg.Height -= 2 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
 
 		s, _ := a.status.Update(msg)
@@ -240,11 +252,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		a.initDialog.SetSize(msg.Width, msg.Height)
 
-		if a.showArgumentsDialog {
-			a.argumentsDialog.SetSize(msg.Width, msg.Height)
-			args, argsCmd := a.argumentsDialog.Update(msg)
-			a.argumentsDialog = args.(dialog.ArgumentsDialogCmp)
-			cmds = append(cmds, argsCmd, a.argumentsDialog.Init())
+		if a.showMultiArgumentsDialog {
+			a.multiArgumentsDialog.SetSize(msg.Width, msg.Height)
+			args, argsCmd := a.multiArgumentsDialog.Update(msg)
+			a.multiArgumentsDialog = args.(dialog.MultiArgumentsDialogCmp)
+			cmds = append(cmds, argsCmd, a.multiArgumentsDialog.Init())
 		}
 
 		return a, tea.Batch(cmds...)
@@ -323,6 +335,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
 		return a, nil
+		
+	case dialog.CloseToolsDialogMsg:
+		a.showToolsDialog = false
+		return a, nil
+		
+	case dialog.ShowToolsDialogMsg:
+		a.showToolsDialog = msg.Show
+		return a, nil
 
 	case dialog.ThemeChangedMsg:
 		a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
@@ -386,33 +406,39 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		status.Info("Command selected: " + msg.Command.Title)
 		return a, nil
 
-	case dialog.ShowArgumentsDialogMsg:
-		// Show arguments dialog
-		a.argumentsDialog = dialog.NewArgumentsDialogCmp(msg.CommandID, msg.Content)
-		a.showArgumentsDialog = true
-		return a, a.argumentsDialog.Init()
+	case dialog.ShowMultiArgumentsDialogMsg:
+		// Show multi-arguments dialog
+		a.multiArgumentsDialog = dialog.NewMultiArgumentsDialogCmp(msg.CommandID, msg.Content, msg.ArgNames)
+		a.showMultiArgumentsDialog = true
+		return a, a.multiArgumentsDialog.Init()
 
-	case dialog.CloseArgumentsDialogMsg:
-		// Close arguments dialog
-		a.showArgumentsDialog = false
+	case dialog.CloseMultiArgumentsDialogMsg:
+		// Close multi-arguments dialog
+		a.showMultiArgumentsDialog = false
 
-		// If submitted, replace $ARGUMENTS and run the command
+		// If submitted, replace all named arguments and run the command
 		if msg.Submit {
-			// Replace $ARGUMENTS with the provided arguments
-			content := strings.ReplaceAll(msg.Content, "$ARGUMENTS", msg.Arguments)
+			content := msg.Content
+
+			// Replace each named argument with its value
+			for name, value := range msg.Args {
+				placeholder := "$" + name
+				content = strings.ReplaceAll(content, placeholder, value)
+			}
 
 			// Execute the command with arguments
 			return a, util.CmdHandler(dialog.CommandRunCustomMsg{
 				Content: content,
+				Args:    msg.Args,
 			})
 		}
 		return a, nil
 
 	case tea.KeyMsg:
-		// If arguments dialog is open, let it handle the key press first
-		if a.showArgumentsDialog {
-			args, cmd := a.argumentsDialog.Update(msg)
-			a.argumentsDialog = args.(dialog.ArgumentsDialogCmp)
+		// If multi-arguments dialog is open, let it handle the key press first
+		if a.showMultiArgumentsDialog {
+			args, cmd := a.multiArgumentsDialog.Update(msg)
+			a.multiArgumentsDialog = args.(dialog.MultiArgumentsDialogCmp)
 			return a, cmd
 		}
 
@@ -438,12 +464,21 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.showModelDialog {
 				a.showModelDialog = false
 			}
-			if a.showArgumentsDialog {
-				a.showArgumentsDialog = false
+			if a.showMultiArgumentsDialog {
+				a.showMultiArgumentsDialog = false
+			}
+			if a.showToolsDialog {
+				a.showToolsDialog = false
 			}
 			return a, nil
 		case key.Matches(msg, keys.SwitchSession):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showModelDialog = false
+				a.showFilepicker = false
+				
 				// Load sessions and show the dialog
 				sessions, err := a.app.Sessions.List(context.Background())
 				if err != nil {
@@ -461,6 +496,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, keys.Commands):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showThemeDialog && !a.showFilepicker {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showModelDialog = false
+				
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -477,14 +516,40 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showFilepicker = false
+				
 				a.showModelDialog = true
 				return a, nil
 			}
 			return a, nil
 		case key.Matches(msg, keys.SwitchTheme):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
+				// Close other dialogs
+				a.showToolsDialog = false
+				a.showModelDialog = false
+				a.showFilepicker = false
+				
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
+			}
+			return a, nil
+		case key.Matches(msg, keys.Tools):
+			// Check if any other dialog is open
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
+			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
+			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
+			   !a.showMultiArgumentsDialog {
+				// Toggle tools dialog
+				a.showToolsDialog = !a.showToolsDialog
+				if a.showToolsDialog {
+					// Get tool names dynamically
+					toolNames := getAvailableToolNames(a.app)
+					a.toolsDialog.SetTools(toolNames)
+				}
+				return a, nil
 			}
 			return a, nil
 		case key.Matches(msg, returnKey) || key.Matches(msg):
@@ -493,6 +558,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, a.moveToPage(page.ChatPage)
 				}
 			} else if !a.filepicker.IsCWDFocused() {
+				if a.showToolsDialog {
+					a.showToolsDialog = false
+					return a, nil
+				}
 				if a.showQuit {
 					a.showQuit = !a.showQuit
 					return a, nil
@@ -527,6 +596,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
+			
+			// Close other dialogs if opening help
+			if a.showHelp {
+				a.showToolsDialog = false
+			}
 			return a, nil
 		case key.Matches(msg, helpEsc):
 			if a.app.PrimaryAgent.IsBusy() {
@@ -537,8 +611,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case key.Matches(msg, keys.Filepicker):
+			// Toggle filepicker
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
+			
+			// Close other dialogs if opening filepicker
+			if a.showFilepicker {
+				a.showToolsDialog = false
+				a.showThemeDialog = false
+				a.showModelDialog = false
+				a.showCommandDialog = false
+				a.showSessionDialog = false
+			}
 			return a, nil
 		}
 
@@ -647,6 +731,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
+	
+	if a.showToolsDialog {
+		d, toolsCmd := a.toolsDialog.Update(msg)
+		a.toolsDialog = d.(dialog.ToolsDialog)
+		cmds = append(cmds, toolsCmd)
+		// Only block key messages send all other messages down
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return a, tea.Batch(cmds...)
+		}
+	}
 
 	s, cmd := a.status.Update(msg)
 	cmds = append(cmds, cmd)
@@ -660,6 +754,26 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // RegisterCommand adds a command to the command dialog
 func (a *appModel) RegisterCommand(cmd dialog.Command) {
 	a.commands = append(a.commands, cmd)
+}
+
+// getAvailableToolNames returns a list of all available tool names
+func getAvailableToolNames(app *app.App) []string {
+	// Get primary agent tools (which already include MCP tools)
+	allTools := agent.PrimaryAgentTools(
+		app.Permissions,
+		app.Sessions,
+		app.Messages,
+		app.History,
+		app.LSPClients,
+	)
+	
+	// Extract tool names
+	var toolNames []string
+	for _, tool := range allTools {
+		toolNames = append(toolNames, tool.Info().Name)
+	}
+	
+	return toolNames
 }
 
 func (a *appModel) moveToPage(pageID page.PageID) tea.Cmd {
@@ -868,8 +982,23 @@ func (a appModel) View() string {
 		)
 	}
 
-	if a.showArgumentsDialog {
-		overlay := a.argumentsDialog.View()
+	if a.showMultiArgumentsDialog {
+		overlay := a.multiArgumentsDialog.View()
+		row := lipgloss.Height(appView) / 2
+		row -= lipgloss.Height(overlay) / 2
+		col := lipgloss.Width(appView) / 2
+		col -= lipgloss.Width(overlay) / 2
+		appView = layout.PlaceOverlay(
+			col,
+			row,
+			overlay,
+			appView,
+			true,
+		)
+	}
+	
+	if a.showToolsDialog {
+		overlay := a.toolsDialog.View()
 		row := lipgloss.Height(appView) / 2
 		row -= lipgloss.Height(overlay) / 2
 		col := lipgloss.Width(appView) / 2
@@ -901,6 +1030,7 @@ func New(app *app.App) tea.Model {
 		permissions:   dialog.NewPermissionDialogCmp(),
 		initDialog:    dialog.NewInitDialogCmp(),
 		themeDialog:   dialog.NewThemeDialogCmp(),
+		toolsDialog:   dialog.NewToolsDialogCmp(),
 		app:           app,
 		commands:      []dialog.Command{},
 		pages: map[page.PageID]tea.Model{
