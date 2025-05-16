@@ -10,6 +10,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/llm/models"
@@ -66,76 +67,96 @@ func newOpenAIClient(opts providerClientOptions) OpenAIClient {
 	}
 }
 
-func (o *openaiClient) convertMessages(messages []message.Message) (openaiMessages []openai.ChatCompletionMessageParamUnion) {
-	// Add system message first
-	openaiMessages = append(openaiMessages, openai.SystemMessage(o.providerOptions.systemMessage))
+func (o *openaiClient) convertMessages(messages []message.Message) responses.ResponseInputParam {
+	inputItems := responses.ResponseInputParam{}
+
+	inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Content: responses.EasyInputMessageContentUnionParam{OfString: openai.String(o.providerOptions.systemMessage)},
+			Role:    responses.EasyInputMessageRoleSystem,
+		},
+	})
 
 	for _, msg := range messages {
 		switch msg.Role {
 		case message.User:
-			var content []openai.ChatCompletionContentPartUnionParam
-			textBlock := openai.ChatCompletionContentPartTextParam{Text: msg.Content().String()}
-			content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
-			for _, binaryContent := range msg.BinaryContent() {
-				imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(models.ProviderOpenAI)}
-				imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
-
-				content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
+			inputItemContentList := responses.ResponseInputMessageContentListParam{
+				responses.ResponseInputContentUnionParam{
+					OfInputText: &responses.ResponseInputTextParam{
+						Text: msg.Content().String(),
+					},
+				},
 			}
 
-			openaiMessages = append(openaiMessages, openai.UserMessage(content))
+			for _, binaryContent := range msg.BinaryContent() {
+				inputItemContentList = append(inputItemContentList, responses.ResponseInputContentUnionParam{
+					OfInputImage: &responses.ResponseInputImageParam{
+						ImageURL: openai.String(binaryContent.String(models.ProviderOpenAI)),
+					},
+				})
+			}
+
+			userMsg := responses.ResponseInputItemUnionParam{
+				OfInputMessage: &responses.ResponseInputItemMessageParam{
+					Content: inputItemContentList,
+					Role:    string(responses.ResponseInputMessageItemRoleUser),
+				},
+			}
+			inputItems = append(inputItems, userMsg)
 
 		case message.Assistant:
-			assistantMsg := openai.ChatCompletionAssistantMessageParam{
-				Role: "assistant",
-			}
-
 			if msg.Content().String() != "" {
-				assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{
-					OfString: openai.String(msg.Content().String()),
+				assistantMsg := responses.ResponseInputItemUnionParam{
+					OfOutputMessage: &responses.ResponseOutputMessageParam{
+						Content: []responses.ResponseOutputMessageContentUnionParam{{
+							OfOutputText: &responses.ResponseOutputTextParam{
+								Text: msg.Content().String(),
+							},
+						}},
+					},
 				}
+				inputItems = append(inputItems, assistantMsg)
 			}
 
 			if len(msg.ToolCalls()) > 0 {
-				assistantMsg.ToolCalls = make([]openai.ChatCompletionMessageToolCallParam, len(msg.ToolCalls()))
-				for i, call := range msg.ToolCalls() {
-					assistantMsg.ToolCalls[i] = openai.ChatCompletionMessageToolCallParam{
-						ID:   call.ID,
-						Type: "function",
-						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				for _, call := range msg.ToolCalls() {
+					toolMsg := responses.ResponseInputItemUnionParam{
+						OfFunctionCall: &responses.ResponseFunctionToolCallParam{
+							CallID:    call.ID,
 							Name:      call.Name,
 							Arguments: call.Input,
 						},
 					}
+					inputItems = append(inputItems, toolMsg)
 				}
 			}
 
-			openaiMessages = append(openaiMessages, openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &assistantMsg,
-			})
-
 		case message.Tool:
 			for _, result := range msg.ToolResults() {
-				openaiMessages = append(openaiMessages,
-					openai.ToolMessage(result.Content, result.ToolCallID),
-				)
+				toolMsg := responses.ResponseInputItemUnionParam{
+					OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
+						Output: result.Content,
+						CallID: result.ToolCallID,
+					},
+				}
+				inputItems = append(inputItems, toolMsg)
 			}
 		}
 	}
 
-	return
+	return inputItems
 }
 
-func (o *openaiClient) convertTools(tools []tools.BaseTool) []openai.ChatCompletionToolParam {
-	openaiTools := make([]openai.ChatCompletionToolParam, len(tools))
+func (o *openaiClient) convertTools(tools []tools.BaseTool) []responses.ToolUnionParam {
+	outputTools := make([]responses.ToolUnionParam, len(tools))
 
 	for i, tool := range tools {
 		info := tool.Info()
-		openaiTools[i] = openai.ChatCompletionToolParam{
-			Function: openai.FunctionDefinitionParam{
+		outputTools[i] = responses.ToolUnionParam{
+			OfFunction: &responses.FunctionToolParam{
 				Name:        info.Name,
 				Description: openai.String(info.Description),
-				Parameters: openai.FunctionParameters{
+				Parameters: map[string]any{
 					"type":       "object",
 					"properties": info.Parameters,
 					"required":   info.Required,
@@ -144,7 +165,7 @@ func (o *openaiClient) convertTools(tools []tools.BaseTool) []openai.ChatComplet
 		}
 	}
 
-	return openaiTools
+	return outputTools
 }
 
 func (o *openaiClient) finishReason(reason string) message.FinishReason {
@@ -160,27 +181,26 @@ func (o *openaiClient) finishReason(reason string) message.FinishReason {
 	}
 }
 
-func (o *openaiClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, tools []openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
-	params := openai.ChatCompletionNewParams{
-		Model:    openai.ChatModel(o.providerOptions.model.APIModel),
-		Messages: messages,
-		Tools:    tools,
+func (o *openaiClient) preparedParams(input responses.ResponseInputParam, tools []responses.ToolUnionParam) responses.ResponseNewParams {
+	params := responses.ResponseNewParams{
+		Model: shared.ResponsesModel(o.providerOptions.model.APIModel),
+		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: input},
+		Tools: tools,
 	}
 
+	params.MaxOutputTokens = openai.Int(o.providerOptions.maxTokens)
+
 	if o.providerOptions.model.CanReason == true {
-		params.MaxCompletionTokens = openai.Int(o.providerOptions.maxTokens)
 		switch o.options.reasoningEffort {
 		case "low":
-			params.ReasoningEffort = shared.ReasoningEffortLow
+			params.Reasoning.Effort = shared.ReasoningEffortLow
 		case "medium":
-			params.ReasoningEffort = shared.ReasoningEffortMedium
+			params.Reasoning.Effort = shared.ReasoningEffortMedium
 		case "high":
-			params.ReasoningEffort = shared.ReasoningEffortHigh
+			params.Reasoning.Effort = shared.ReasoningEffortHigh
 		default:
-			params.ReasoningEffort = shared.ReasoningEffortMedium
+			params.Reasoning.Effort = shared.ReasoningEffortMedium
 		}
-	} else {
-		params.MaxTokens = openai.Int(o.providerOptions.maxTokens)
 	}
 
 	if o.providerOptions.model.Provider == models.ProviderOpenRouter {
@@ -204,7 +224,7 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 	attempts := 0
 	for {
 		attempts++
-		openaiResponse, err := o.client.Chat.Completions.New(
+		openaiResponse, err := o.client.Responses.New(
 			ctx,
 			params,
 		)
@@ -228,12 +248,12 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 		}
 
 		content := ""
-		if openaiResponse.Choices[0].Message.Content != "" {
-			content = openaiResponse.Choices[0].Message.Content
+		if openaiResponse.OutputText() != "" {
+			content = openaiResponse.OutputText()
 		}
 
 		toolCalls := o.toolCalls(*openaiResponse)
-		finishReason := o.finishReason(string(openaiResponse.Choices[0].FinishReason))
+		finishReason := o.finishReason("stop")
 
 		if len(toolCalls) > 0 {
 			finishReason = message.FinishReasonToolUse
@@ -249,10 +269,9 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 }
 
 func (o *openaiClient) stream(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
+	eventChan := make(chan ProviderEvent)
+
 	params := o.preparedParams(o.convertMessages(messages), o.convertTools(tools))
-	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
-		IncludeUsage: openai.Bool(true),
-	}
 
 	cfg := config.Get()
 	if cfg.Debug {
@@ -261,55 +280,96 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 	}
 
 	attempts := 0
-	eventChan := make(chan ProviderEvent)
 
 	go func() {
 		for {
 			attempts++
-			openaiStream := o.client.Chat.Completions.NewStreaming(
-				ctx,
-				params,
-			)
+			stream := o.client.Responses.NewStreaming(ctx, params)
 
-			acc := openai.ChatCompletionAccumulator{}
-			currentContent := ""
-			toolCalls := make([]message.ToolCall, 0)
+			outputText := ""
+			currentToolCallID := ""
+			for stream.Next() {
+				event := stream.Current()
 
-			for openaiStream.Next() {
-				chunk := openaiStream.Current()
-				acc.AddChunk(chunk)
+				switch event := event.AsAny().(type) {
+				case responses.ResponseCompletedEvent:
+					toolCalls := o.toolCalls(event.Response)
+					finishReason := o.finishReason("stop")
 
-				for _, choice := range chunk.Choices {
-					if choice.Delta.Content != "" {
-						eventChan <- ProviderEvent{
-							Type:    EventContentDelta,
-							Content: choice.Delta.Content,
-						}
-						currentContent += choice.Delta.Content
+					if len(toolCalls) > 0 {
+						finishReason = message.FinishReasonToolUse
 					}
+
+					eventChan <- ProviderEvent{
+						Type: EventComplete,
+						Response: &ProviderResponse{
+							Content:      outputText,
+							ToolCalls:    toolCalls,
+							Usage:        o.usage(event.Response),
+							FinishReason: finishReason,
+						},
+					}
+					close(eventChan)
+					return
+
+				case responses.ResponseTextDeltaEvent:
+					outputText += event.Delta
+					eventChan <- ProviderEvent{
+						Type:    EventContentDelta,
+						Content: event.Delta,
+					}
+
+				case responses.ResponseTextDoneEvent:
+					eventChan <- ProviderEvent{
+						Type:    EventContentStop,
+						Content: outputText,
+					}
+					close(eventChan)
+					return
+
+				case responses.ResponseOutputItemAddedEvent:
+					if event.Item.Type == "function_call" {
+						currentToolCallID = event.Item.ID
+						eventChan <- ProviderEvent{
+							Type: EventToolUseStart,
+							ToolCall: &message.ToolCall{
+								ID:       event.Item.ID,
+								Name:     event.Item.Name,
+								Finished: false,
+							},
+						}
+					}
+
+				case responses.ResponseFunctionCallArgumentsDeltaEvent:
+					if event.ItemID == currentToolCallID {
+						eventChan <- ProviderEvent{
+							Type: EventToolUseDelta,
+							ToolCall: &message.ToolCall{
+								ID:       currentToolCallID,
+								Finished: false,
+								Input:    event.Delta,
+							},
+						}
+					}
+
+				case responses.ResponseFunctionCallArgumentsDoneEvent:
+					if event.ItemID == currentToolCallID {
+						eventChan <- ProviderEvent{
+							Type: EventToolUseStop,
+							ToolCall: &message.ToolCall{
+								ID:    currentToolCallID,
+								Input: event.Arguments,
+							},
+						}
+						currentToolCallID = ""
+					}
+
+					// TODO: handle other events
 				}
 			}
 
-			err := openaiStream.Err()
+			err := stream.Err()
 			if err == nil || errors.Is(err, io.EOF) {
-				// Stream completed successfully
-				finishReason := o.finishReason(string(acc.ChatCompletion.Choices[0].FinishReason))
-				if len(acc.ChatCompletion.Choices[0].Message.ToolCalls) > 0 {
-					toolCalls = append(toolCalls, o.toolCalls(acc.ChatCompletion)...)
-				}
-				if len(toolCalls) > 0 {
-					finishReason = message.FinishReasonToolUse
-				}
-
-				eventChan <- ProviderEvent{
-					Type: EventComplete,
-					Response: &ProviderResponse{
-						Content:      currentContent,
-						ToolCalls:    toolCalls,
-						Usage:        o.usage(acc.ChatCompletion),
-						FinishReason: finishReason,
-					},
-				}
 				close(eventChan)
 				return
 			}
@@ -373,15 +433,16 @@ func (o *openaiClient) shouldRetry(attempts int, err error) (bool, int64, error)
 	return true, int64(retryMs), nil
 }
 
-func (o *openaiClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {
+func (o *openaiClient) toolCalls(response responses.Response) []message.ToolCall {
 	var toolCalls []message.ToolCall
 
-	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
-		for _, call := range completion.Choices[0].Message.ToolCalls {
+	for _, output := range response.Output {
+		if output.Type == "function_call" {
+			call := output.AsFunctionCall()
 			toolCall := message.ToolCall{
 				ID:       call.ID,
-				Name:     call.Function.Name,
-				Input:    call.Function.Arguments,
+				Name:     call.Name,
+				Input:    call.Arguments,
 				Type:     "function",
 				Finished: true,
 			}
@@ -392,13 +453,13 @@ func (o *openaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 	return toolCalls
 }
 
-func (o *openaiClient) usage(completion openai.ChatCompletion) TokenUsage {
-	cachedTokens := completion.Usage.PromptTokensDetails.CachedTokens
-	inputTokens := completion.Usage.PromptTokens - cachedTokens
+func (o *openaiClient) usage(response responses.Response) TokenUsage {
+	cachedTokens := response.Usage.InputTokensDetails.CachedTokens
+	inputTokens := response.Usage.InputTokens - cachedTokens
 
 	return TokenUsage{
 		InputTokens:         inputTokens,
-		OutputTokens:        completion.Usage.CompletionTokens,
+		OutputTokens:        response.Usage.OutputTokens,
 		CacheCreationTokens: 0, // OpenAI doesn't provide this directly
 		CacheReadTokens:     cachedTokens,
 	}

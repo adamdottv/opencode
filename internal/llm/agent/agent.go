@@ -522,15 +522,6 @@ func (a *agent) processEvent(ctx context.Context, sessionID string, assistantMsg
 		assistantMsg.AddToolCall(*event.ToolCall)
 		_, err := a.messages.Update(ctx, *assistantMsg)
 		return err
-	// TODO: see how to handle this
-	// case provider.EventToolUseDelta:
-	// 	tm := time.Unix(assistantMsg.UpdatedAt, 0)
-	// 	assistantMsg.AppendToolCallInput(event.ToolCall.ID, event.ToolCall.Input)
-	// 	if time.Since(tm) > 1000*time.Millisecond {
-	// 		err := a.messages.Update(ctx, *assistantMsg)
-	// 		assistantMsg.UpdatedAt = time.Now().Unix()
-	// 		return err
-	// 	}
 	case provider.EventToolUseStop:
 		assistantMsg.FinishToolCall(event.ToolCall.ID)
 		_, err := a.messages.Update(ctx, *assistantMsg)
