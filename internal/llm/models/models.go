@@ -78,12 +78,14 @@ func AvailableProviders() ([]ModelProvider, map[ModelProvider]string) {
 	providerList = make([]ModelProvider, 0, len(providerLabels))
 	providerList = append(providerList, ProviderAnthropic)
 	providerList = append(providerList, ProviderAzure)
-	providerList = append(providerList, ProviderBedrock)
+	// FIXME: Re-add when the setup wizard supports it
+	// providerList = append(providerList, ProviderBedrock)
 	providerList = append(providerList, ProviderGemini)
 	providerList = append(providerList, ProviderGROQ)
 	providerList = append(providerList, ProviderOpenAI)
 	providerList = append(providerList, ProviderOpenRouter)
-	providerList = append(providerList, ProviderVertexAI)
+	// FIXME: Re-add when the setup wizard supports it
+	// providerList = append(providerList, ProviderVertexAI)
 	providerList = append(providerList, ProviderXAI)
 
 	return providerList, providerLabels
