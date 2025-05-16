@@ -19,73 +19,6 @@ type SetupDialog interface {
 	layout.Bindings
 }
 
-// AvailableProviders returns a list of all available providers
-func AvailableProviders() ([]models.ModelProvider, map[models.ModelProvider]string) {
-	providerLabels := make(map[models.ModelProvider]string)
-	providerLabels[models.ProviderAnthropic] = "Anthropic"
-	providerLabels[models.ProviderAzure] = "Azure"
-	providerLabels[models.ProviderBedrock] = "Bedrock"
-	providerLabels[models.ProviderGemini] = "Gemini"
-	providerLabels[models.ProviderGROQ] = "Groq"
-	providerLabels[models.ProviderOpenAI] = "OpenAI"
-	providerLabels[models.ProviderOpenRouter] = "OpenRouter"
-	providerLabels[models.ProviderXAI] = "xAI"
-
-	providerList := make([]models.ModelProvider, 0, len(providerLabels))
-	providerList = append(providerList, models.ProviderAnthropic)
-	providerList = append(providerList, models.ProviderAzure)
-	providerList = append(providerList, models.ProviderBedrock)
-	providerList = append(providerList, models.ProviderGemini)
-	providerList = append(providerList, models.ProviderGROQ)
-	providerList = append(providerList, models.ProviderOpenAI)
-	providerList = append(providerList, models.ProviderOpenRouter)
-	providerList = append(providerList, models.ProviderXAI)
-
-	return providerList, providerLabels
-}
-
-// AvailableModelsByProvider returns a list of all available models by provider
-func AvailableModelsByProvider(provider models.ModelProvider) []models.Model {
-	var modelMap map[models.ModelID]models.Model
-
-	switch provider {
-	default:
-		modelMap = map[models.ModelID]models.Model{}
-	case models.ProviderAnthropic:
-		modelMap = models.AnthropicModels
-	case models.ProviderAzure:
-		modelMap = models.AzureModels
-	case models.ProviderBedrock:
-		modelMap = models.BedrockModels
-	case models.ProviderGemini:
-		modelMap = models.GeminiModels
-	case models.ProviderGROQ:
-		modelMap = models.GroqModels
-	case models.ProviderOpenAI:
-		modelMap = models.OpenAIModels
-	case models.ProviderOpenRouter:
-		modelMap = models.OpenRouterModels
-	case models.ProviderXAI:
-		modelMap = models.XAIModels
-	}
-
-	models := make([]models.Model, 0, len(modelMap))
-	for _, model := range modelMap {
-		models = append(models, model)
-	}
-
-	// Sort models by alphabetical order
-	for i := 0; i < len(models)-1; i++ {
-		for j := i + 1; j < len(models); j++ {
-			if models[i].Name > models[j].Name {
-				models[i], models[j] = models[j], models[i]
-			}
-		}
-	}
-
-	return models
-}
-
 type SetupStep string
 
 const (
@@ -168,7 +101,7 @@ func (s *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.selectedProviderIdx = 0
 				}
 			case key.Matches(msg, setupKeys.Enter):
-				s.models = AvailableModelsByProvider(s.providers[s.selectedProviderIdx])
+				s.models = models.AvailableModelsByProvider(s.providers[s.selectedProviderIdx])
 				s.step = SelectModel
 			case key.Matches(msg, setupKeys.Escape):
 				s.step = Start
@@ -523,7 +456,7 @@ func NewSetupDialogCmp() SetupDialog {
 	ti.PromptStyle = ti.PromptStyle.Background(t.Background())
 	ti.TextStyle = ti.TextStyle.Background(t.Background())
 
-	providers, providerLabels := AvailableProviders()
+	providers, providerLabels := models.AvailableProviders()
 
 	return &setupDialogCmp{
 		keys:           setupKeys,
