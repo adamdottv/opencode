@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -64,7 +63,6 @@ var editorMaps = EditorKeyMaps{
 		key.WithKeys("ctrl+v"),
 		key.WithHelp("ctrl+v", "paste content"),
 	),
-	
 }
 
 var DeleteKeyMaps = DeleteAttachmentKeyMaps{
@@ -209,16 +207,16 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.deleteMode = false
 			return m, nil
 		}
-		
+
 		if key.Matches(msg, editorMaps.Paste) {
-			imageBytes, text, err := image.GetImageFromClipboard()	
+			imageBytes, text, err := image.GetImageFromClipboard()
 			if err != nil {
 				slog.Error(err.Error())
 				return m, cmd
 			}
 			if len(imageBytes) != 0 {
 				attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
-				attachment := message.Attachment{FileName: attachmentName, Content: imageBytes, MimeType: "image/png"}
+				attachment := message.Attachment{FilePath: attachmentName, FileName: attachmentName, Content: imageBytes, MimeType: "image/png"}
 				m.attachments = append(m.attachments, attachment)
 			} else {
 				m.textarea.SetValue(m.textarea.Value() + text)

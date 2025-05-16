@@ -7,26 +7,27 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log/slog"
 	"syscall"
 	"unsafe"
 )
 
 var (
-	user32              = syscall.NewLazyDLL("user32.dll")
-	kernel32            = syscall.NewLazyDLL("kernel32.dll")
-	openClipboard       = user32.NewProc("OpenClipboard")
-	closeClipboard      = user32.NewProc("CloseClipboard")
-	getClipboardData    = user32.NewProc("GetClipboardData")
+	user32                     = syscall.NewLazyDLL("user32.dll")
+	kernel32                   = syscall.NewLazyDLL("kernel32.dll")
+	openClipboard              = user32.NewProc("OpenClipboard")
+	closeClipboard             = user32.NewProc("CloseClipboard")
+	getClipboardData           = user32.NewProc("GetClipboardData")
 	isClipboardFormatAvailable = user32.NewProc("IsClipboardFormatAvailable")
-	globalLock              = kernel32.NewProc("GlobalLock")
-	globalUnlock            = kernel32.NewProc("GlobalUnlock")
-	globalSize              = kernel32.NewProc("GlobalSize")
+	globalLock                 = kernel32.NewProc("GlobalLock")
+	globalUnlock               = kernel32.NewProc("GlobalUnlock")
+	globalSize                 = kernel32.NewProc("GlobalSize")
 )
 
 const (
-	CF_TEXT = 1
+	CF_TEXT        = 1
 	CF_UNICODETEXT = 13
-	CF_DIB = 8
+	CF_DIB         = 8
 )
 
 type BITMAPINFOHEADER struct {
@@ -44,32 +45,39 @@ type BITMAPINFOHEADER struct {
 }
 
 func GetImageFromClipboard() ([]byte, string, error) {
-	ret, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_DIB))
-	if ret == 0 {
-		return nil, "", fmt.Errorf("no DIB image in clipboard")
-	}
-
-	ret, _, _ = openClipboard.Call(0)
+	ret, _, _ := openClipboard.Call(0)
 	if ret == 0 {
 		return nil, "", fmt.Errorf("failed to open clipboard")
 	}
-	defer closeClipboard.Call()
-isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
+	defer func(closeClipboard *syscall.LazyProc, a ...uintptr) {
+		_, _, err := closeClipboard.Call(a...)
+		if err != nil {
+			slog.Error("close clipboard failed")
+			return
+		}
+	}(closeClipboard)
+	isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 	isUnicodeTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_UNICODETEXT))
-	
+
 	if isTextAvailable != 0 || isUnicodeTextAvailable != 0 {
 		// Get text from clipboard
 		var formatToUse uintptr = CF_TEXT
 		if isUnicodeTextAvailable != 0 {
 			formatToUse = CF_UNICODETEXT
 		}
-		
+
 		hClipboardText, _, _ := getClipboardData.Call(formatToUse)
 		if hClipboardText != 0 {
 			textPtr, _, _ := globalLock.Call(hClipboardText)
 			if textPtr != 0 {
-				defer globalUnlock.Call(hClipboardText)
-				
+				defer func(globalUnlock *syscall.LazyProc, a ...uintptr) {
+					_, _, err := globalUnlock.Call(a...)
+					if err != nil {
+						slog.Error("Global unlock failed")
+						return
+					}
+				}(globalUnlock, hClipboardText)
+
 				// Get clipboard text
 				var clipboardText string
 				if formatToUse == CF_UNICODETEXT {
@@ -85,7 +93,7 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 						clipboardText = bytesToString(textBytes)
 					}
 				}
-				
+
 				// Check if the text is not empty
 				if clipboardText != "" {
 					return nil, clipboardText, nil
@@ -93,7 +101,6 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 			}
 		}
 	}
-
 	hClipboardData, _, _ := getClipboardData.Call(uintptr(CF_DIB))
 	if hClipboardData == 0 {
 		return nil, "", fmt.Errorf("failed to get clipboard data")
@@ -103,14 +110,20 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 	if dataPtr == 0 {
 		return nil, "", fmt.Errorf("failed to lock clipboard data")
 	}
-	defer globalUnlock.Call(hClipboardData)
+	defer func(globalUnlock *syscall.LazyProc, a ...uintptr) {
+		_, _, err := globalUnlock.Call(a...)
+		if err != nil {
+			slog.Error("Global unlock failed")
+			return
+		}
+	}(globalUnlock, hClipboardData)
 
 	bmiHeader := (*BITMAPINFOHEADER)(unsafe.Pointer(dataPtr))
 
 	width := int(bmiHeader.BiWidth)
 	height := int(bmiHeader.BiHeight)
 	if height < 0 {
-		height = -height 
+		height = -height
 	}
 	bitsPerPixel := int(bmiHeader.BiBitCount)
 
@@ -122,17 +135,17 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 		if bmiHeader.BiClrUsed > 0 {
 			numColors = bmiHeader.BiClrUsed
 		}
-		bitsOffset = uintptr(unsafe.Sizeof(*bmiHeader)) + uintptr(numColors*4)
+		bitsOffset = unsafe.Sizeof(*bmiHeader) + uintptr(numColors*4)
 	} else {
-		bitsOffset = uintptr(unsafe.Sizeof(*bmiHeader))
+		bitsOffset = unsafe.Sizeof(*bmiHeader)
 	}
 
 	for y := range height {
 		for x := range width {
-			
+
 			srcY := height - y - 1
 			if bmiHeader.BiHeight < 0 {
-				srcY = y 
+				srcY = y
 			}
 
 			var pixelPointer unsafe.Pointer
@@ -140,7 +153,7 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 
 			switch bitsPerPixel {
 			case 24:
-				stride := (width*3 + 3) &^ 3 
+				stride := (width*3 + 3) &^ 3
 				pixelPointer = unsafe.Pointer(dataPtr + bitsOffset + uintptr(srcY*stride+x*3))
 				b = *(*byte)(pixelPointer)
 				g = *(*byte)(unsafe.Add(pixelPointer, 1))
@@ -153,13 +166,13 @@ isTextAvailable, _, _ := isClipboardFormatAvailable.Call(uintptr(CF_TEXT))
 				r = *(*byte)(unsafe.Add(pixelPointer, 2))
 				a = *(*byte)(unsafe.Add(pixelPointer, 3))
 				if a == 0 {
-					a = 255 
+					a = 255
 				}
 			default:
 				return nil, "", fmt.Errorf("unsupported bit count: %d", bitsPerPixel)
 			}
 
-			img.Set(x, y, color.RGBA{r, g, b, a})
+			img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: a})
 		}
 	}
 
