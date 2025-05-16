@@ -1,8 +1,6 @@
 package dialog
 
 import (
-	"sort"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,14 +35,19 @@ type toolItem struct {
 }
 
 func (t toolItem) Render(selected bool, width int) string {
-	baseStyle := styles.BaseStyle().Width(width)
+	th := theme.CurrentTheme()
+	baseStyle := styles.BaseStyle().
+		Width(width).
+		Background(th.Background())
 	
 	if selected {
-		th := theme.CurrentTheme()
 		baseStyle = baseStyle.
 			Background(th.Primary()).
 			Foreground(th.Background()).
 			Bold(true)
+	} else {
+		baseStyle = baseStyle.
+			Foreground(th.Text())
 	}
 	
 	return baseStyle.Render(t.name)
@@ -93,9 +96,6 @@ func (m *toolsDialogCmp) Init() tea.Cmd {
 }
 
 func (m *toolsDialogCmp) SetTools(tools []string) {
-	// Sort tools alphabetically
-	sort.Strings(tools)
-	
 	var toolItems []toolItem
 	for _, name := range tools {
 		toolItems = append(toolItems, toolItem{name: name})
@@ -125,7 +125,7 @@ func (m *toolsDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *toolsDialogCmp) View() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.BaseStyle().Background(t.Background())
 
 	title := baseStyle.
 		Foreground(t.Primary()).
@@ -148,6 +148,7 @@ func (m *toolsDialogCmp) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderBackground(t.Background()).
 		BorderForeground(t.TextMuted()).
+		Background(t.Background()).
 		Width(lipgloss.Width(content) + 4).
 		Render(content)
 }

@@ -656,22 +656,14 @@ func (a *appModel) RegisterCommand(cmd dialog.Command) {
 
 // getAvailableToolNames returns a list of all available tool names
 func getAvailableToolNames(app *app.App) []string {
-	ctx := context.Background()
-	
-	// Get primary agent tools
-	primaryTools := agent.PrimaryAgentTools(
+	// Get primary agent tools (which already include MCP tools)
+	allTools := agent.PrimaryAgentTools(
 		app.Permissions,
 		app.Sessions,
 		app.Messages,
 		app.History,
 		app.LSPClients,
 	)
-	
-	// Get MCP tools
-	mcpTools := agent.GetMcpTools(ctx, app.Permissions)
-	
-	// Combine all tools
-	allTools := append(primaryTools, mcpTools...)
 	
 	// Extract tool names
 	var toolNames []string
