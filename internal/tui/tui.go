@@ -317,6 +317,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Complete setup
 		setup.CompleteSetup(msg.Provider, msg.Model, msg.APIKey)
 
+		// Reinitialize the model dialog
+		a.modelDialog.Init()
+
 		// Reinitialize the primary agent
 		a.app.InitializePrimaryAgent()
 
