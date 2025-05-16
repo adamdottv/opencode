@@ -1,13 +1,11 @@
 package llm
 
 import (
-	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sst/opencode/internal/llm/models"
 	utilComponents "github.com/sst/opencode/internal/tui/components/util"
 	"github.com/sst/opencode/internal/tui/styles"
 	"github.com/sst/opencode/internal/tui/theme"
-	"log/slog"
 )
 
 type ModelListItem struct {
@@ -56,8 +54,6 @@ func (p *ModelList) Update(msg tea.Msg) (ModelList, tea.Cmd) {
 func BuildListItemsForProvider(provider models.ModelProvider) []ModelListItem {
 	modelsByProvider := models.AvailableModelsByProvider()
 
-	slog.Debug(fmt.Sprintf("modelsByProvider: %v", modelsByProvider))
-
 	modelListItems := make([]ModelListItem, 0, len(modelsByProvider[provider]))
 	for _, model := range modelsByProvider[provider] {
 		modelListItems = append(modelListItems, ModelListItem{Model: model})
@@ -68,8 +64,6 @@ func BuildListItemsForProvider(provider models.ModelProvider) []ModelListItem {
 
 func (p *ModelList) SetProvider(provider models.ModelProvider) {
 	modelListItems := BuildListItemsForProvider(provider)
-
-	slog.Debug(fmt.Sprintf("models: %v", modelListItems))
 
 	p.list.SetItems(modelListItems)
 }
