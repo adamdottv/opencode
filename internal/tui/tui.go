@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/config"
+	"github.com/sst/opencode/internal/llm/agent"
 	"github.com/sst/opencode/internal/logging"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/permission"
@@ -38,6 +39,7 @@ type keyMap struct {
 	Filepicker    key.Binding
 	Models        key.Binding
 	SwitchTheme   key.Binding
+	Tools         key.Binding
 }
 
 const (
@@ -80,6 +82,11 @@ var keys = keyMap{
 	SwitchTheme: key.NewBinding(
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("ctrl+t", "switch theme"),
+	),
+	
+	Tools: key.NewBinding(
+		key.WithKeys("f9"),
+		key.WithHelp("f9", "show available tools"),
 	),
 }
 
@@ -137,6 +144,9 @@ type appModel struct {
 
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
+	
+	showToolsDialog bool
+	toolsDialog     dialog.ToolsDialog
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -161,6 +171,8 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.filepicker.Init()
 	cmds = append(cmds, cmd)
 	cmd = a.themeDialog.Init()
+	cmds = append(cmds, cmd)
+	cmd = a.toolsDialog.Init()
 	cmds = append(cmds, cmd)
 
 	// Check if we should show the init dialog
@@ -286,6 +298,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
+		return a, nil
+		
+	case dialog.CloseToolsDialogMsg:
+		a.showToolsDialog = false
+		return a, nil
+		
+	case dialog.ShowToolsDialogMsg:
+		a.showToolsDialog = msg.Show
 		return a, nil
 
 	case dialog.ThemeChangedMsg:
@@ -450,6 +470,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
+		case key.Matches(msg, keys.Tools):
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && !a.showFilepicker {
+				// Get tool names dynamically
+				toolNames := getAvailableToolNames(a.app)
+				a.toolsDialog.SetTools(toolNames)
+				a.showToolsDialog = true
+				return a, nil
+			}
+			return a, nil
 		case key.Matches(msg, returnKey) || key.Matches(msg):
 			if msg.String() == quitKey {
 				if a.currentPage == page.LogsPage {
@@ -600,6 +629,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
+	
+	if a.showToolsDialog {
+		d, toolsCmd := a.toolsDialog.Update(msg)
+		a.toolsDialog = d.(dialog.ToolsDialog)
+		cmds = append(cmds, toolsCmd)
+		// Only block key messages send all other messages down
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return a, tea.Batch(cmds...)
+		}
+	}
 
 	s, cmd := a.status.Update(msg)
 	cmds = append(cmds, cmd)
@@ -613,6 +652,34 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // RegisterCommand adds a command to the command dialog
 func (a *appModel) RegisterCommand(cmd dialog.Command) {
 	a.commands = append(a.commands, cmd)
+}
+
+// getAvailableToolNames returns a list of all available tool names
+func getAvailableToolNames(app *app.App) []string {
+	ctx := context.Background()
+	
+	// Get primary agent tools
+	primaryTools := agent.PrimaryAgentTools(
+		app.Permissions,
+		app.Sessions,
+		app.Messages,
+		app.History,
+		app.LSPClients,
+	)
+	
+	// Get MCP tools
+	mcpTools := agent.GetMcpTools(ctx, app.Permissions)
+	
+	// Combine all tools
+	allTools := append(primaryTools, mcpTools...)
+	
+	// Extract tool names
+	var toolNames []string
+	for _, tool := range allTools {
+		toolNames = append(toolNames, tool.Info().Name)
+	}
+	
+	return toolNames
 }
 
 func (a *appModel) moveToPage(pageID page.PageID) tea.Cmd {
@@ -820,6 +887,21 @@ func (a appModel) View() string {
 			true,
 		)
 	}
+	
+	if a.showToolsDialog {
+		overlay := a.toolsDialog.View()
+		row := lipgloss.Height(appView) / 2
+		row -= lipgloss.Height(overlay) / 2
+		col := lipgloss.Width(appView) / 2
+		col -= lipgloss.Width(overlay) / 2
+		appView = layout.PlaceOverlay(
+			col,
+			row,
+			overlay,
+			appView,
+			true,
+		)
+	}
 
 	return appView
 }
@@ -838,6 +920,7 @@ func New(app *app.App) tea.Model {
 		permissions:   dialog.NewPermissionDialogCmp(),
 		initDialog:    dialog.NewInitDialogCmp(),
 		themeDialog:   dialog.NewThemeDialogCmp(),
+		toolsDialog:   dialog.NewToolsDialogCmp(),
 		app:           app,
 		commands:      []dialog.Command{},
 		pages: map[page.PageID]tea.Model{
