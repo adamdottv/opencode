@@ -23,6 +23,7 @@ import (
 	"github.com/sst/opencode/internal/permission"
 	"github.com/sst/opencode/internal/pubsub"
 	"github.com/sst/opencode/internal/tui"
+	"github.com/sst/opencode/internal/tui/components/spinner"
 	"github.com/sst/opencode/internal/version"
 )
 
@@ -226,11 +227,11 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet)
 	
 	// Start spinner if not in quiet mode
-	var spinner *format.Spinner
+	var s *spinner.Spinner
 	if !quiet {
-		spinner = format.NewSpinner("Thinking...")
-		spinner.Start()
-		defer spinner.Stop()
+		s = spinner.NewSpinner("Thinking...")
+		s.Start()
+		defer s.Stop()
 	}
 	
 	// Connect DB, this will also run migrations
@@ -299,8 +300,8 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	}
 	
 	// Stop spinner before printing output
-	if !quiet && spinner != nil {
-		spinner.Stop()
+	if !quiet && s != nil {
+		s.Stop()
 	}
 	
 	// Print the formatted output to stdout

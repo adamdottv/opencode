@@ -1,4 +1,4 @@
-package format
+package spinner
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Spinner wraps the bubbles spinner for non-interactive mode
+// Spinner wraps the bubbles spinner for both interactive and non-interactive mode
 type Spinner struct {
 	model  spinner.Model
 	done   chan struct{}
