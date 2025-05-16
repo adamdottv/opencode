@@ -298,6 +298,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseQuitMsg:
 		a.showQuit = false
 
+		if !setup.IsSetupComplete() {
+			a.showSetupDialog = true
+		}
+
 		return a, nil
 
 	case dialog.CloseSessionDialogMsg:
