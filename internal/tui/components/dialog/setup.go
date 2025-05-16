@@ -276,7 +276,7 @@ func (s *setupDialogCmp) RenderSelectProviderStep() string {
 		title,
 		baseStyle.Width(maxWidth).Render(""),
 		s.providerList.View(),
-		baseStyle.Width(maxWidth).Render("\n\n"),
+		baseStyle.Width(maxWidth).Render(""),
 		baseStyle.Width(maxWidth).Render(helpText),
 	)
 
@@ -315,7 +315,7 @@ func (s *setupDialogCmp) RenderSelectModelStep() string {
 		title,
 		baseStyle.Width(maxWidth).Render(""),
 		s.modelList.View(),
-		baseStyle.Width(maxWidth).Render("\n\n"),
+		baseStyle.Width(maxWidth).Render(""),
 		baseStyle.Width(maxWidth).Render(helpText),
 	)
 

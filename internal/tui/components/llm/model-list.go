@@ -83,7 +83,7 @@ type NewModelListOptions struct {
 }
 
 func NewModelList(options NewModelListOptions) ModelList {
-	var maxVisibleItems = 10
+	var maxVisibleItems = 24
 	if options.MaxVisibleItems != nil {
 		maxVisibleItems = *options.MaxVisibleItems
 	}
