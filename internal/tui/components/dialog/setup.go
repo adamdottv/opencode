@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/llm/models"
+	"github.com/sst/opencode/internal/tui/components/llm"
 	"github.com/sst/opencode/internal/tui/layout"
 	"github.com/sst/opencode/internal/tui/styles"
 	"github.com/sst/opencode/internal/tui/theme"
@@ -32,9 +33,8 @@ type setupDialogCmp struct {
 	currentModel        string
 	currentProvider     string
 	keys                setupMapping
-	models              []models.Model
-	providers           []models.ModelProvider
-	providerLabels      map[models.ModelProvider]string
+	modelList           llm.ModelList
+	providerList        llm.ProviderList
 	selectedModelIdx    int
 	selectedProviderIdx int
 	step                SetupStep
@@ -83,6 +83,9 @@ func (s *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return s, nil
 		}
 	case tea.KeyMsg:
+		var cmd tea.Cmd
+		var cmds []tea.Cmd
+
 		if s.step == Start && key.Matches(msg, setupKeys.Enter) {
 			s.step = SelectProvider
 			return s, nil
@@ -90,45 +93,30 @@ func (s *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if s.step == SelectProvider {
 			switch {
-			case key.Matches(msg, setupKeys.Up):
-				s.selectedProviderIdx--
-				if s.selectedProviderIdx < 0 {
-					s.selectedProviderIdx = len(s.providers) - 1
-				}
-			case key.Matches(msg, setupKeys.Down):
-				s.selectedProviderIdx++
-				if s.selectedProviderIdx >= len(s.providers) {
-					s.selectedProviderIdx = 0
-				}
 			case key.Matches(msg, setupKeys.Enter):
-				s.models = models.AvailableModelsByProvider(s.providers[s.selectedProviderIdx])
+				s.modelList.SetProvider(s.providerList.GetSelectedProvider().Name)
 				s.step = SelectModel
 			case key.Matches(msg, setupKeys.Escape):
 				s.step = Start
 			}
 
-			return s, nil
+			s.providerList, cmd = s.providerList.Update(msg)
+			cmds = append(cmds, cmd)
+
+			return s, tea.Batch(cmds...)
 		}
 
 		if s.step == SelectModel {
 			switch {
-			case key.Matches(msg, setupKeys.Up):
-				s.selectedModelIdx--
-				if s.selectedModelIdx < 0 {
-					s.selectedModelIdx = len(s.providers) - 1
-				}
-			case key.Matches(msg, setupKeys.Down):
-				s.selectedModelIdx++
-				if s.selectedModelIdx >= len(s.providers) {
-					s.selectedProviderIdx = 0
-				}
 			case key.Matches(msg, setupKeys.Enter):
 				s.step = InputApiKey
 				s.textInput.Focus()
 			case key.Matches(msg, setupKeys.Escape):
-				s.selectedModelIdx = 0
 				s.step = SelectProvider
 			}
+
+			s.modelList, cmd = s.modelList.Update(msg)
+			cmds = append(cmds, cmd)
 
 			return s, nil
 		}
@@ -145,14 +133,11 @@ func (s *setupDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				return s, util.CmdHandler(CloseSetupDialogMsg{
-					Provider: s.providers[s.selectedProviderIdx],
-					Model:    s.models[s.selectedModelIdx],
+					Provider: s.providerList.GetSelectedProvider().Name,
+					Model:    s.modelList.GetSelectedModel().Model,
 					APIKey:   s.textInput.Value(),
 				})
 			}
-
-			var cmd tea.Cmd
-			var cmds []tea.Cmd
 
 			s.textInput, cmd = s.textInput.Update(msg)
 			cmds = append(cmds, cmd)
@@ -268,14 +253,7 @@ func (s *setupDialogCmp) RenderSelectProviderStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
-	// Calculate max width needed for provider names
 	maxWidth := 36
-	for _, providerName := range s.providers {
-		if len(providerName) > maxWidth {
-			maxWidth = len(providerName)
-		}
-	}
-
 	helpText := s.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
@@ -284,21 +262,6 @@ func (s *setupDialogCmp) RenderSelectProviderStep() string {
 	remainingWidth := maxWidth - lipgloss.Width(helpText)
 	if remainingWidth > 0 {
 		helpText = strings.Repeat(" ", remainingWidth) + helpText
-	}
-
-	// Build the provider list
-	providerItems := make([]string, 0, len(s.providers))
-	for i, provider := range s.providers {
-		itemStyle := baseStyle.Width(maxWidth)
-
-		if i == s.selectedProviderIdx {
-			itemStyle = itemStyle.
-				Background(t.Primary()).
-				Foreground(t.Background()).
-				Bold(true)
-		}
-
-		providerItems = append(providerItems, itemStyle.Padding(0, 1).Render(s.providerLabels[provider]))
 	}
 
 	title := baseStyle.
@@ -312,7 +275,7 @@ func (s *setupDialogCmp) RenderSelectProviderStep() string {
 		lipgloss.Left,
 		title,
 		baseStyle.Width(maxWidth).Render(""),
-		baseStyle.Width(maxWidth).Render(lipgloss.JoinVertical(lipgloss.Left, providerItems...)),
+		s.providerList.View(),
 		baseStyle.Width(maxWidth).Render("\n\n"),
 		baseStyle.Width(maxWidth).Render(helpText),
 	)
@@ -329,14 +292,7 @@ func (s *setupDialogCmp) RenderSelectModelStep() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
-	// Calculate max width needed for model names
 	maxWidth := 36
-	for _, model := range s.models {
-		if len(model.Name) > maxWidth {
-			maxWidth = len(model.Name)
-		}
-	}
-
 	helpText := s.renderHelp()
 	helpWidth := lipgloss.Width(helpText)
 	maxWidth = max(maxWidth, helpWidth)
@@ -345,21 +301,6 @@ func (s *setupDialogCmp) RenderSelectModelStep() string {
 	remainingWidth := maxWidth - lipgloss.Width(helpText)
 	if remainingWidth > 0 {
 		helpText = strings.Repeat(" ", remainingWidth) + helpText
-	}
-
-	// Build the model list
-	modelItems := make([]string, 0, len(s.models))
-	for i, model := range s.models {
-		itemStyle := baseStyle.Width(maxWidth)
-
-		if i == s.selectedModelIdx {
-			itemStyle = itemStyle.
-				Background(t.Primary()).
-				Foreground(t.Background()).
-				Bold(true)
-		}
-
-		modelItems = append(modelItems, itemStyle.Padding(0, 1).Render(model.Name))
 	}
 
 	title := baseStyle.
@@ -373,7 +314,7 @@ func (s *setupDialogCmp) RenderSelectModelStep() string {
 		lipgloss.Left,
 		title,
 		baseStyle.Width(maxWidth).Render(""),
-		baseStyle.Width(maxWidth).Render(lipgloss.JoinVertical(lipgloss.Left, modelItems...)),
+		s.modelList.View(),
 		baseStyle.Width(maxWidth).Render("\n\n"),
 		baseStyle.Width(maxWidth).Render(helpText),
 	)
@@ -456,14 +397,20 @@ func NewSetupDialogCmp() SetupDialog {
 	ti.PromptStyle = ti.PromptStyle.Background(t.Background())
 	ti.TextStyle = ti.TextStyle.Background(t.Background())
 
-	providers, providerLabels := models.AvailableProviders()
+	listWidth := new(int)
+	*listWidth = 36
 
 	return &setupDialogCmp{
-		keys:           setupKeys,
-		providers:      providers,
-		providerLabels: providerLabels,
-		step:           Start,
-		textInput:      ti,
+		keys: setupKeys,
+		modelList: llm.NewModelList(llm.NewModelListOptions{
+			InitialProvider: models.ProviderAnthropic,
+			Width:           listWidth,
+		}),
+		providerList: llm.NewProviderList(llm.NewProviderListOptions{
+			Width: listWidth,
+		}),
+		step:      Start,
+		textInput: ti,
 	}
 }
 
