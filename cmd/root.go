@@ -17,6 +17,7 @@ import (
 	"github.com/sst/opencode/internal/db"
 	"github.com/sst/opencode/internal/format"
 	"github.com/sst/opencode/internal/llm/agent"
+	"github.com/sst/opencode/internal/llm/tools"
 	"github.com/sst/opencode/internal/logging"
 	"github.com/sst/opencode/internal/lsp/discovery"
 	"github.com/sst/opencode/internal/message"
@@ -100,9 +101,14 @@ to assist developers in writing, debugging, and understanding code directly from
 			if !outputFormat.IsValid() {
 				return fmt.Errorf("invalid output format: %s", outputFormatStr)
 			}
-			
+
 			quiet, _ := cmd.Flags().GetBool("quiet")
-			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet)
+
+			// Get tool restriction flags
+			allowedTools, _ := cmd.Flags().GetStringSlice("allowedTools")
+			excludedTools, _ := cmd.Flags().GetStringSlice("excludedTools")
+
+			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, allowedTools, excludedTools)
 		}
 
 		// Run LSP auto-discovery
@@ -208,6 +214,45 @@ func attemptTUIRecovery(program *tea.Program) {
 	program.Quit()
 }
 
+// filterTools filters the provided tools based on allowed or excluded tool names
+func filterTools(allTools []tools.BaseTool, allowedTools, excludedTools []string) []tools.BaseTool {
+	// If neither allowed nor excluded tools are specified, return all tools
+	if len(allowedTools) == 0 && len(excludedTools) == 0 {
+		return allTools
+	}
+
+	// Create a map for faster lookups
+	allowedMap := make(map[string]bool)
+	for _, name := range allowedTools {
+		allowedMap[name] = true
+	}
+
+	excludedMap := make(map[string]bool)
+	for _, name := range excludedTools {
+		excludedMap[name] = true
+	}
+
+	var filteredTools []tools.BaseTool
+
+	for _, tool := range allTools {
+		toolName := tool.Info().Name
+
+		// If we have an allowed list, only include tools in that list
+		if len(allowedTools) > 0 {
+			if allowedMap[toolName] {
+				filteredTools = append(filteredTools, tool)
+			}
+		} else if len(excludedTools) > 0 {
+			// If we have an excluded list, include all tools except those in the list
+			if !excludedMap[toolName] {
+				filteredTools = append(filteredTools, tool)
+			}
+		}
+	}
+
+	return filteredTools
+}
+
 func initMCPTools(ctx context.Context, app *app.App) {
 	go func() {
 		defer logging.RecoverPanic("MCP-goroutine", nil)
@@ -223,9 +268,10 @@ func initMCPTools(ctx context.Context, app *app.App) {
 }
 
 // handleNonInteractiveMode processes a single prompt in non-interactive mode
-func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool) error {
-	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet)
-	
+func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, allowedTools, excludedTools []string) error {
+	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet,
+		"allowedTools", allowedTools, "excludedTools", excludedTools)
+
 	// Start spinner if not in quiet mode
 	var s *spinner.Spinner
 	if !quiet {
@@ -233,36 +279,36 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 		s.Start()
 		defer s.Stop()
 	}
-	
+
 	// Connect DB, this will also run migrations
 	conn, err := db.Connect()
 	if err != nil {
 		return err
 	}
-	
+
 	// Create a context with cancellation
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	
+
 	// Create the app
 	app, err := app.New(ctx, conn)
 	if err != nil {
 		slog.Error("Failed to create app", "error", err)
 		return err
 	}
-	
+
 	// Auto-approve all permissions for non-interactive mode
 	permission.AutoApproveSession(ctx, "non-interactive")
-	
+
 	// Create a new session for this prompt
 	session, err := app.Sessions.Create(ctx, "Non-interactive prompt")
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
 	}
-	
+
 	// Set the session as current
 	app.CurrentSession = &session
-	
+
 	// Create the user message
 	_, err = app.Messages.Create(ctx, session.ID, message.CreateMessageParams{
 		Role:  message.User,
@@ -271,13 +317,90 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	if err != nil {
 		return fmt.Errorf("failed to create message: %w", err)
 	}
-	
-	// Run the agent to get a response
+
+	// If tool restrictions are specified, create a new agent with filtered tools
+	if len(allowedTools) > 0 || len(excludedTools) > 0 {
+		// Initialize MCP tools synchronously to ensure they're included in filtering
+		mcpCtx, mcpCancel := context.WithTimeout(ctx, 10*time.Second)
+		agent.GetMcpTools(mcpCtx, app.Permissions)
+		mcpCancel()
+
+		// Get all available tools including MCP tools
+		allTools := agent.PrimaryAgentTools(
+			app.Permissions,
+			app.Sessions,
+			app.Messages,
+			app.History,
+			app.LSPClients,
+		)
+
+		// Filter tools based on allowed/excluded lists
+		filteredTools := filterTools(allTools, allowedTools, excludedTools)
+
+		// Log the filtered tools for debugging
+		var toolNames []string
+		for _, tool := range filteredTools {
+			toolNames = append(toolNames, tool.Info().Name)
+		}
+		slog.Debug("Using filtered tools", "count", len(filteredTools), "tools", toolNames)
+
+		// Create a new agent with the filtered tools
+		restrictedAgent, err := agent.NewAgent(
+			config.AgentPrimary,
+			app.Sessions,
+			app.Messages,
+			filteredTools,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create restricted agent: %w", err)
+		}
+
+		// Use the restricted agent for this request
+		eventCh, err := restrictedAgent.Run(ctx, session.ID, prompt)
+		if err != nil {
+			return fmt.Errorf("failed to run restricted agent: %w", err)
+		}
+
+		// Wait for the response
+		var response message.Message
+		for event := range eventCh {
+			if event.Err() != nil {
+				return fmt.Errorf("agent error: %w", event.Err())
+			}
+			response = event.Response()
+		}
+
+		// Format and print the output
+		content := ""
+		if textContent := response.Content(); textContent != nil {
+			content = textContent.Text
+		}
+
+		formattedOutput, err := format.FormatOutput(content, outputFormat)
+		if err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+
+		// Stop spinner before printing output
+		if !quiet && s != nil {
+			s.Stop()
+		}
+
+		// Print the formatted output to stdout
+		fmt.Println(formattedOutput)
+
+		// Shutdown the app
+		app.Shutdown()
+
+		return nil
+	}
+
+	// Run the default agent if no tool restrictions
 	eventCh, err := app.PrimaryAgent.Run(ctx, session.ID, prompt)
 	if err != nil {
 		return fmt.Errorf("failed to run agent: %w", err)
 	}
-	
+
 	// Wait for the response
 	var response message.Message
 	for event := range eventCh {
@@ -286,30 +409,30 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 		}
 		response = event.Response()
 	}
-	
+
 	// Get the text content from the response
 	content := ""
 	if textContent := response.Content(); textContent != nil {
 		content = textContent.Text
 	}
-	
+
 	// Format the output according to the specified format
 	formattedOutput, err := format.FormatOutput(content, outputFormat)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
-	
+
 	// Stop spinner before printing output
 	if !quiet && s != nil {
 		s.Stop()
 	}
-	
+
 	// Print the formatted output to stdout
 	fmt.Println(formattedOutput)
-	
+
 	// Shutdown the app
 	app.Shutdown()
-	
+
 	return nil
 }
 
@@ -407,4 +530,9 @@ func init() {
 	rootCmd.Flags().StringP("prompt", "p", "", "Run a single prompt in non-interactive mode")
 	rootCmd.Flags().StringP("output-format", "f", "text", "Output format for non-interactive mode (text, json)")
 	rootCmd.Flags().BoolP("quiet", "q", false, "Hide spinner in non-interactive mode")
+	rootCmd.Flags().StringSlice("allowedTools", nil, "Restrict the agent to only use the specified tools in non-interactive mode (comma-separated list)")
+	rootCmd.Flags().StringSlice("excludedTools", nil, "Prevent the agent from using the specified tools in non-interactive mode (comma-separated list)")
+
+	// Make allowedTools and excludedTools mutually exclusive
+	rootCmd.MarkFlagsMutuallyExclusive("allowedTools", "excludedTools")
 }
