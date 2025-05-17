@@ -103,12 +103,13 @@ to assist developers in writing, debugging, and understanding code directly from
 			}
 
 			quiet, _ := cmd.Flags().GetBool("quiet")
+			verbose, _ := cmd.Flags().GetBool("verbose")
 
 			// Get tool restriction flags
 			allowedTools, _ := cmd.Flags().GetStringSlice("allowedTools")
 			excludedTools, _ := cmd.Flags().GetStringSlice("excludedTools")
 
-			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, allowedTools, excludedTools)
+			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, verbose, allowedTools, excludedTools)
 		}
 
 		// Run LSP auto-discovery
@@ -268,9 +269,24 @@ func initMCPTools(ctx context.Context, app *app.App) {
 }
 
 // handleNonInteractiveMode processes a single prompt in non-interactive mode
-func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, allowedTools, excludedTools []string) error {
-	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet,
+func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, verbose bool, allowedTools, excludedTools []string) error {
+	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet, "verbose", verbose,
 		"allowedTools", allowedTools, "excludedTools", excludedTools)
+
+	// Sanity check for mutually exclusive flags
+	if quiet && verbose {
+		return fmt.Errorf("--quiet and --verbose flags cannot be used together")
+	}
+
+	// Set up logging to stderr if verbose mode is enabled
+	if verbose {
+		// Create a text handler that writes to stderr
+		textHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+		logger := slog.New(textHandler)
+		slog.SetDefault(logger)
+	}
 
 	// Start spinner if not in quiet mode
 	var s *spinner.Spinner
@@ -530,9 +546,13 @@ func init() {
 	rootCmd.Flags().StringP("prompt", "p", "", "Run a single prompt in non-interactive mode")
 	rootCmd.Flags().StringP("output-format", "f", "text", "Output format for non-interactive mode (text, json)")
 	rootCmd.Flags().BoolP("quiet", "q", false, "Hide spinner in non-interactive mode")
+	rootCmd.Flags().BoolP("verbose", "", false, "Display logs to stderr in non-interactive mode")
 	rootCmd.Flags().StringSlice("allowedTools", nil, "Restrict the agent to only use the specified tools in non-interactive mode (comma-separated list)")
 	rootCmd.Flags().StringSlice("excludedTools", nil, "Prevent the agent from using the specified tools in non-interactive mode (comma-separated list)")
 
 	// Make allowedTools and excludedTools mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("allowedTools", "excludedTools")
+
+	// Make quiet and verbose mutually exclusive
+	rootCmd.MarkFlagsMutuallyExclusive("quiet", "verbose")
 }
