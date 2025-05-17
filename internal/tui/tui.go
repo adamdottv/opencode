@@ -181,9 +181,6 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.toolsDialog.Init()
 	cmds = append(cmds, cmd)
 
-	// Checks config to see if setup is complete
-	setup.Init()
-
 	// Check if we should show the setup or init dialog
 	cmds = append(cmds, func() tea.Msg {
 		if !setup.IsSetupComplete() {
