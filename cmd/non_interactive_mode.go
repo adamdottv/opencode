@@ -117,9 +117,6 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 		return err
 	}
 
-	// Auto-approve all permissions for non-interactive mode
-	permission.AutoApproveSession(ctx, "non-interactive")
-
 	// Create a new session for this prompt
 	session, err := app.Sessions.Create(ctx, "Non-interactive prompt")
 	if err != nil {
@@ -128,6 +125,9 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 
 	// Set the session as current
 	app.CurrentSession = &session
+
+	// Auto-approve all permissions for this session
+	permission.AutoApproveSession(ctx, session.ID)
 
 	// Create the user message
 	_, err = app.Messages.Create(ctx, session.ID, message.CreateMessageParams{
