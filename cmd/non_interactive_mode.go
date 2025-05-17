@@ -8,6 +8,7 @@ import (
 
 	"log/slog"
 
+	charmlog "github.com/charmbracelet/log"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/db"
@@ -60,6 +61,7 @@ func filterTools(allTools []tools.BaseTool, allowedTools, excludedTools []string
 
 // handleNonInteractiveMode processes a single prompt in non-interactive mode
 func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, verbose bool, allowedTools, excludedTools []string) error {
+	// Initial log message using standard slog
 	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet, "verbose", verbose,
 		"allowedTools", allowedTools, "excludedTools", excludedTools)
 
@@ -70,12 +72,24 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 
 	// Set up logging to stderr if verbose mode is enabled
 	if verbose {
-		// Create a text handler that writes to stderr
-		textHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
+		// Create a charmbracelet/log logger that writes to stderr
+		charmLogger := charmlog.NewWithOptions(os.Stderr, charmlog.Options{
+			Level:           charmlog.DebugLevel,
+			ReportCaller:    true,
+			ReportTimestamp: true,
+			TimeFormat:      time.RFC3339,
+			Prefix:          "OpenCode",
 		})
-		logger := slog.New(textHandler)
-		slog.SetDefault(logger)
+
+		// Set the global logger for charmbracelet/log
+		charmlog.SetDefault(charmLogger)
+
+		// Create a slog handler that uses charmbracelet/log
+		// This will forward all slog logs to charmbracelet/log
+		slog.SetDefault(slog.New(charmLogger))
+
+		// Log a message to confirm verbose logging is enabled
+		charmLogger.Info("Verbose logging enabled")
 	}
 
 	// Start spinner if not in quiet mode
