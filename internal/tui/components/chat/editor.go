@@ -248,11 +248,11 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle history navigation with up/down arrow keys
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryUp) {
-			// Check if we're at the top line of a multi-line message
-			lineInfo := m.textarea.LineInfo()
+			// Get the current line number
+			currentLine := m.textarea.Line()
 			
 			// Only navigate history if we're at the first line
-			if lineInfo.RowOffset == 0 && len(m.history) > 0 {
+			if currentLine == 0 && len(m.history) > 0 {
 				// Save current message if we're just starting to navigate
 				if m.historyIndex == len(m.history) {
 					m.currentMessage = m.textarea.Value()
@@ -268,12 +268,14 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryDown) {
-			// Check if we're at the bottom line of a multi-line message
-			lineInfo := m.textarea.LineInfo()
-			lineCount := m.textarea.LineCount()
+			// Get the current line number and total lines
+			currentLine := m.textarea.Line()
+			value := m.textarea.Value()
+			lines := strings.Split(value, "\n")
+			totalLines := len(lines)
 			
 			// Only navigate history if we're at the last line
-			if lineInfo.RowOffset == lineCount-1 {
+			if currentLine == totalLines-1 {
 				if m.historyIndex < len(m.history)-1 {
 					// Go to next message in history
 					m.historyIndex++
