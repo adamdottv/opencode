@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"sync"
 	"time"
 
 	"log/slog"
@@ -18,7 +20,26 @@ import (
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/permission"
 	"github.com/sst/opencode/internal/tui/components/spinner"
+	"github.com/sst/opencode/internal/tui/theme"
 )
+
+// syncWriter is a thread-safe writer that prevents interleaved output
+type syncWriter struct {
+	w  io.Writer
+	mu sync.Mutex
+}
+
+// Write implements io.Writer
+func (sw *syncWriter) Write(p []byte) (n int, err error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	return sw.w.Write(p)
+}
+
+// newSyncWriter creates a new synchronized writer
+func newSyncWriter(w io.Writer) io.Writer {
+	return &syncWriter{w: w}
+}
 
 // filterTools filters the provided tools based on allowed or excluded tool names
 func filterTools(allTools []tools.BaseTool, allowedTools, excludedTools []string) []tools.BaseTool {
@@ -72,8 +93,11 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 
 	// Set up logging to stderr if verbose mode is enabled
 	if verbose {
-		// Create a charmbracelet/log logger that writes to stderr
-		charmLogger := charmlog.NewWithOptions(os.Stderr, charmlog.Options{
+		// Create a synchronized writer to prevent interleaved output
+		syncWriter := newSyncWriter(os.Stderr)
+
+		// Create a charmbracelet/log logger that writes to the synchronized writer
+		charmLogger := charmlog.NewWithOptions(syncWriter, charmlog.Options{
 			Level:           charmlog.DebugLevel,
 			ReportCaller:    true,
 			ReportTimestamp: true,
@@ -95,7 +119,18 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	// Start spinner if not in quiet mode
 	var s *spinner.Spinner
 	if !quiet {
-		s = spinner.NewSpinner("Thinking...")
+		// Get the current theme to style the spinner
+		currentTheme := theme.CurrentTheme()
+
+		// Create a themed spinner
+		if currentTheme != nil {
+			// Use the primary color from the theme
+			s = spinner.NewThemedSpinner("Thinking...", currentTheme.Primary())
+		} else {
+			// Fallback to default spinner if no theme is available
+			s = spinner.NewSpinner("Thinking...")
+		}
+
 		s.Start()
 		defer s.Stop()
 	}
