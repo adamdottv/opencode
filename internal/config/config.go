@@ -178,7 +178,19 @@ func Load(workingDir string, debug bool, lvl *slog.LevelVar) (*Config, error) {
 		Model:     cfg.Agents[AgentTitle].Model,
 		MaxTokens: 80,
 	}
+
 	return cfg, nil
+}
+
+func Update(updateCfg func(config *Config)) error {
+	if cfg == nil {
+		return fmt.Errorf("config not loaded")
+	}
+
+	return updateCfgFile(func(config *Config) {
+		updateCfg(config)
+		cfg = config
+	})
 }
 
 // configureViper sets up viper's configuration paths and environment variables.
