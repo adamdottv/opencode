@@ -118,7 +118,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Process messages to extract text and resources
 		var textContent strings.Builder
 		var attachments []message.Attachment
-		
+
 		for _, msg := range messages {
 			if msg.Role == "user" {
 				// Try to extract content based on JSON structure
@@ -126,17 +126,17 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					continue
 				}
-				
+
 				var contentMap map[string]interface{}
 				if err := json.Unmarshal(contentJSON, &contentMap); err != nil {
 					continue
 				}
-				
+
 				contentType, hasType := contentMap["type"].(string)
 				if !hasType {
 					continue
 				}
-				
+
 				if contentType == "text" {
 					// Handle text content
 					if text, ok := contentMap["text"].(string); ok {
@@ -149,20 +149,20 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						continue
 					}
-					
+
 					var resourceMap map[string]interface{}
 					if err := json.Unmarshal(resourceJSON, &resourceMap); err != nil {
 						continue
 					}
-					
+
 					uri, hasURI := resourceMap["uri"].(string)
 					text, hasText := resourceMap["text"].(string)
 					mimeType, hasMimeType := resourceMap["mimeType"].(string)
-					
+
 					if hasURI {
 						// Add a reference to the resource in the text
 						textContent.WriteString(fmt.Sprintf("Resource: %s\n\n", uri))
-						
+
 						// Create an attachment for the resource
 						if hasText {
 							attachment := message.Attachment{
@@ -170,12 +170,12 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								MimeType: "text/plain", // Default mime type
 								Content:  []byte(text),
 							}
-							
+
 							// Set mime type if available
 							if hasMimeType {
 								attachment.MimeType = mimeType
 							}
-							
+
 							attachments = append(attachments, attachment)
 						}
 					}

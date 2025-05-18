@@ -85,7 +85,7 @@ var keys = keyMap{
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("ctrl+t", "switch theme"),
 	),
-	
+
 	Tools: key.NewBinding(
 		key.WithKeys("f9"),
 		key.WithHelp("f9", "show available tools"),
@@ -147,7 +147,7 @@ type appModel struct {
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
 	multiArgumentsHandler    dialog.ArgumentHandler
-	
+
 	showToolsDialog bool
 	toolsDialog     dialog.ToolsDialog
 }
@@ -302,11 +302,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
 		return a, nil
-		
+
 	case dialog.CloseToolsDialogMsg:
 		a.showToolsDialog = false
 		return a, nil
-		
+
 	case dialog.ShowToolsDialogMsg:
 		a.showToolsDialog = msg.Show
 		return a, nil
@@ -398,7 +398,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.multiArgumentsHandler != nil {
 				return a, a.multiArgumentsHandler(msg.Args)
 			}
-			
+
 			// Otherwise, use the traditional approach for custom commands
 			content := msg.Content
 
@@ -457,7 +457,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showThemeDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				// Load sessions and show the dialog
 				sessions, err := a.app.Sessions.List(context.Background())
 				if err != nil {
@@ -478,7 +478,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showModelDialog = false
-				
+
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -499,7 +499,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showThemeDialog = false
 				a.showFilepicker = false
-				
+
 				a.showModelDialog = true
 				return a, nil
 			}
@@ -510,17 +510,17 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
 		case key.Matches(msg, keys.Tools):
 			// Check if any other dialog is open
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
-			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
-			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
-			   !a.showMultiArgumentsDialog {
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions &&
+				!a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog &&
+				!a.showFilepicker && !a.showModelDialog && !a.showInitDialog &&
+				!a.showMultiArgumentsDialog {
 				// Toggle tools dialog
 				a.showToolsDialog = !a.showToolsDialog
 				if a.showToolsDialog {
@@ -575,7 +575,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
-			
+
 			// Close other dialogs if opening help
 			if a.showHelp {
 				a.showToolsDialog = false
@@ -593,7 +593,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Toggle filepicker
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
-			
+
 			// Close other dialogs if opening filepicker
 			if a.showFilepicker {
 				a.showToolsDialog = false
@@ -700,7 +700,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
-	
+
 	if a.showToolsDialog {
 		d, toolsCmd := a.toolsDialog.Update(msg)
 		a.toolsDialog = d.(dialog.ToolsDialog)
@@ -731,10 +731,10 @@ func (a *appModel) RegisterMCPPrompts(ctx context.Context) {
 	for _, prompt := range prompts {
 		// Create a copy of the prompt for the closure
 		p := prompt
-		
+
 		// Create command ID in the format <server_name>:<prompt_name>
 		commandID := fmt.Sprintf("%s:%s", p.ServerName, p.Name)
-		
+
 		// Create command
 		cmd := dialog.Command{
 			ID:          commandID,
@@ -752,7 +752,7 @@ func (a *appModel) RegisterMCPPrompts(ctx context.Context) {
 							Required:    arg.Required,
 						})
 					}
-					
+
 					return util.CmdHandler(dialog.ShowMultiArgumentsDialogMsg{
 						CommandID: cmd.ID,
 						Arguments: args,
@@ -761,12 +761,12 @@ func (a *appModel) RegisterMCPPrompts(ctx context.Context) {
 						},
 					})
 				}
-				
+
 				// No arguments, execute directly
 				return a.executeMCPPrompt(p, nil)
 			},
 		}
-		
+
 		a.RegisterCommand(cmd)
 	}
 }
@@ -780,11 +780,11 @@ func (a *appModel) executeMCPPrompt(prompt agent.MCPPrompt, args map[string]stri
 			status.Error(fmt.Sprintf("Failed to execute prompt: %v", err))
 			return nil
 		}
-		
+
 		// Process messages to extract text and resources
 		var textContent strings.Builder
 		var attachments []message.Attachment
-		
+
 		for _, msg := range messages {
 			if msg.Role == "user" {
 				// Try to extract content based on JSON structure
@@ -792,17 +792,17 @@ func (a *appModel) executeMCPPrompt(prompt agent.MCPPrompt, args map[string]stri
 				if err != nil {
 					continue
 				}
-				
+
 				var contentMap map[string]interface{}
 				if err := json.Unmarshal(contentJSON, &contentMap); err != nil {
 					continue
 				}
-				
+
 				contentType, hasType := contentMap["type"].(string)
 				if !hasType {
 					continue
 				}
-				
+
 				if contentType == "text" {
 					// Handle text content
 					if text, ok := contentMap["text"].(string); ok {
@@ -815,20 +815,20 @@ func (a *appModel) executeMCPPrompt(prompt agent.MCPPrompt, args map[string]stri
 					if err != nil {
 						continue
 					}
-					
+
 					var resourceMap map[string]interface{}
 					if err := json.Unmarshal(resourceJSON, &resourceMap); err != nil {
 						continue
 					}
-					
+
 					uri, hasURI := resourceMap["uri"].(string)
 					text, hasText := resourceMap["text"].(string)
 					mimeType, hasMimeType := resourceMap["mimeType"].(string)
-					
+
 					if hasURI {
 						// Add a reference to the resource in the text
 						textContent.WriteString(fmt.Sprintf("Resource: %s\n\n", uri))
-						
+
 						// Create an attachment for the resource
 						if hasText {
 							attachment := message.Attachment{
@@ -836,19 +836,19 @@ func (a *appModel) executeMCPPrompt(prompt agent.MCPPrompt, args map[string]stri
 								MimeType: "text/plain", // Default mime type
 								Content:  []byte(text),
 							}
-							
+
 							// Set mime type if available
 							if hasMimeType {
 								attachment.MimeType = mimeType
 							}
-							
+
 							attachments = append(attachments, attachment)
 						}
 					}
 				}
 			}
 		}
-		
+
 		// Send the result as a message with attachments
 		return chat.SendMsg{
 			Text:        textContent.String(),
@@ -867,13 +867,13 @@ func getAvailableToolNames(app *app.App) []string {
 		app.History,
 		app.LSPClients,
 	)
-	
+
 	// Extract tool names
 	var toolNames []string
 	for _, tool := range allTools {
 		toolNames = append(toolNames, tool.Info().Name)
 	}
-	
+
 	return toolNames
 }
 
@@ -1082,7 +1082,7 @@ func (a appModel) View() string {
 			true,
 		)
 	}
-	
+
 	if a.showToolsDialog {
 		overlay := a.toolsDialog.View()
 		row := lipgloss.Height(appView) / 2

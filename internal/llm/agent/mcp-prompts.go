@@ -13,10 +13,10 @@ import (
 
 // MCPPrompt represents a prompt from an MCP server
 type MCPPrompt struct {
-	Name        string
-	Description string
-	Arguments   []MCPPromptArgument
-	ServerName  string
+	Name         string
+	Description  string
+	Arguments    []MCPPromptArgument
+	ServerName   string
 	ServerConfig config.MCPServer
 }
 
@@ -34,8 +34,8 @@ func GetMCPPrompts(ctx context.Context) []MCPPrompt {
 	for serverName, serverConfig := range config.Get().MCPServers {
 		serverPrompts, err := getPromptsFromServer(ctx, serverName, serverConfig)
 		if err != nil {
-			slog.Error("error fetching prompts from MCP server", 
-				"server", serverName, 
+			slog.Error("error fetching prompts from MCP server",
+				"server", serverName,
 				"error", err)
 			continue
 		}
@@ -94,9 +94,9 @@ func getPromptsFromServer(ctx context.Context, serverName string, serverConfig c
 	var result []MCPPrompt
 	for _, prompt := range promptsResponse.Prompts {
 		mcpPrompt := MCPPrompt{
-			Name:        prompt.Name,
-			Description: prompt.Description,
-			ServerName:  serverName,
+			Name:         prompt.Name,
+			Description:  prompt.Description,
+			ServerName:   serverName,
 			ServerConfig: serverConfig,
 		}
 
