@@ -2,9 +2,8 @@ package app
 
 import (
 	"context"
-	"time"
-
 	"log/slog"
+	"time"
 
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/logging"

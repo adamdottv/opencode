@@ -52,8 +52,8 @@ var keyMap = ChatKeyMap{
 		key.WithHelp("ctrl+h", "toggle tools"),
 	),
 	ShowCompletionDialog: key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "Complete"),
+		key.WithKeys("@"),
+		key.WithHelp("@", "Complete"),
 	),
 }
 
@@ -240,8 +240,14 @@ func (p *chatPage) BindingKeys() []key.Binding {
 }
 
 func NewChatPage(app *app.App) tea.Model {
-	cg := completions.NewFileAndFolderContextGroup()
-	completionDialog := dialog.NewCompletionDialogCmp(cg)
+	filesCg := completions.NewFileAndFolderCompletionProvider()
+	lspCp := completions.NewLspCompleitonProvider(app.LSPClients)
+
+	completionProviders := make([]dialog.CompletionProvider, 0)
+
+	completionProviders = append(completionProviders, filesCg, lspCp)
+
+	completionDialog := dialog.NewCompletionDialogCmp(completionProviders)
 	messagesContainer := layout.NewContainer(
 		chat.NewMessagesCmp(app),
 		layout.WithPadding(1, 1, 0, 1),
