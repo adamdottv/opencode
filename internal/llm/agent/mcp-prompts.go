@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -116,7 +115,7 @@ func getPromptsFromServer(ctx context.Context, serverName string, serverConfig c
 }
 
 // ExecutePrompt executes a prompt on an MCP server
-func ExecutePrompt(ctx context.Context, prompt MCPPrompt, args map[string]string) (string, error) {
+func ExecutePrompt(ctx context.Context, prompt MCPPrompt, args map[string]string) ([]mcp.PromptMessage, error) {
 	var c client.MCPClient
 	var err error
 
@@ -133,11 +132,11 @@ func ExecutePrompt(ctx context.Context, prompt MCPPrompt, args map[string]string
 			client.WithHeaders(prompt.ServerConfig.Headers),
 		)
 	default:
-		return "", fmt.Errorf("unsupported MCP server type: %s", prompt.ServerConfig.Type)
+		return nil, fmt.Errorf("unsupported MCP server type: %s", prompt.ServerConfig.Type)
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("error creating MCP client: %w", err)
+		return nil, fmt.Errorf("error creating MCP client: %w", err)
 	}
 	defer c.Close()
 
@@ -151,7 +150,7 @@ func ExecutePrompt(ctx context.Context, prompt MCPPrompt, args map[string]string
 
 	_, err = c.Initialize(ctx, initRequest)
 	if err != nil {
-		return "", fmt.Errorf("error initializing MCP client: %w", err)
+		return nil, fmt.Errorf("error initializing MCP client: %w", err)
 	}
 
 	// Convert string args to any map
@@ -167,24 +166,9 @@ func ExecutePrompt(ctx context.Context, prompt MCPPrompt, args map[string]string
 
 	promptResponse, err := c.GetPrompt(ctx, promptRequest)
 	if err != nil {
-		return "", fmt.Errorf("error getting prompt: %w", err)
+		return nil, fmt.Errorf("error getting prompt: %w", err)
 	}
 
-	// Convert messages to a string
-	var result string
-	for _, msg := range promptResponse.Messages {
-		if msg.Role == "user" {
-			if content, ok := msg.Content.(mcp.TextContent); ok {
-				result += content.Text + "\n\n"
-			} else {
-				// Try to marshal the content to JSON
-				contentBytes, err := json.Marshal(msg.Content)
-				if err == nil {
-					result += string(contentBytes) + "\n\n"
-				}
-			}
-		}
-	}
-
-	return result, nil
+	// Return the full array of messages
+	return promptResponse.Messages, nil
 }

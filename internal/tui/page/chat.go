@@ -2,7 +2,9 @@ package page
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -107,14 +109,82 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Execute the MCP prompt
-		promptText, err := agent.ExecutePrompt(context.Background(), msg.Prompt, msg.Args)
+		messages, err := agent.ExecutePrompt(context.Background(), msg.Prompt, msg.Args)
 		if err != nil {
 			status.Error(fmt.Sprintf("Failed to execute MCP prompt: %v", err))
 			return p, nil
 		}
 
-		// Send the prompt text as a message
-		cmd := p.sendMessage(promptText, nil)
+		// Process messages to extract text and resources
+		var textContent strings.Builder
+		var attachments []message.Attachment
+		
+		for _, msg := range messages {
+			if msg.Role == "user" {
+				// Try to extract content based on JSON structure
+				contentJSON, err := json.Marshal(msg.Content)
+				if err != nil {
+					continue
+				}
+				
+				var contentMap map[string]interface{}
+				if err := json.Unmarshal(contentJSON, &contentMap); err != nil {
+					continue
+				}
+				
+				contentType, hasType := contentMap["type"].(string)
+				if !hasType {
+					continue
+				}
+				
+				if contentType == "text" {
+					// Handle text content
+					if text, ok := contentMap["text"].(string); ok {
+						textContent.WriteString(text)
+						textContent.WriteString("\n\n")
+					}
+				} else if contentType == "resource" {
+					// Handle resource content
+					resourceJSON, err := json.Marshal(contentMap["resource"])
+					if err != nil {
+						continue
+					}
+					
+					var resourceMap map[string]interface{}
+					if err := json.Unmarshal(resourceJSON, &resourceMap); err != nil {
+						continue
+					}
+					
+					uri, hasURI := resourceMap["uri"].(string)
+					text, hasText := resourceMap["text"].(string)
+					mimeType, hasMimeType := resourceMap["mimeType"].(string)
+					
+					if hasURI {
+						// Add a reference to the resource in the text
+						textContent.WriteString(fmt.Sprintf("Resource: %s\n\n", uri))
+						
+						// Create an attachment for the resource
+						if hasText {
+							attachment := message.Attachment{
+								FileName: filepath.Base(uri),
+								MimeType: "text/plain", // Default mime type
+								Content:  []byte(text),
+							}
+							
+							// Set mime type if available
+							if hasMimeType {
+								attachment.MimeType = mimeType
+							}
+							
+							attachments = append(attachments, attachment)
+						}
+					}
+				}
+			}
+		}
+
+		// Send the prompt text as a message with attachments
+		cmd := p.sendMessage(textContent.String(), attachments)
 		if cmd != nil {
 			return p, cmd
 		}
