@@ -144,6 +144,7 @@ type appModel struct {
 
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
+	multiArgumentsHandler    dialog.ArgumentHandler
 	
 	showToolsDialog bool
 	toolsDialog     dialog.ToolsDialog
@@ -368,16 +369,35 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dialog.ShowMultiArgumentsDialogMsg:
 		// Show multi-arguments dialog
-		a.multiArgumentsDialog = dialog.NewMultiArgumentsDialogCmp(msg.CommandID, msg.Content, msg.ArgNames)
-		a.showMultiArgumentsDialog = true
+		if len(msg.ArgNames) > 0 {
+			a.multiArgumentsDialog = dialog.NewMultiArgumentsDialogCmp(msg.CommandID, msg.Content, msg.ArgNames)
+			a.showMultiArgumentsDialog = true
+			a.multiArgumentsHandler = nil // Clear any previous handler
+		} else if len(msg.Arguments) > 0 {
+			// Extract argument names from Arguments
+			argNames := make([]string, len(msg.Arguments))
+			for i, arg := range msg.Arguments {
+				argNames[i] = arg.Name
+			}
+			a.multiArgumentsDialog = dialog.NewMultiArgumentsDialogCmp(msg.CommandID, "", argNames)
+			a.showMultiArgumentsDialog = true
+			// Store the handler for later use
+			a.multiArgumentsHandler = msg.Handler
+		}
 		return a, a.multiArgumentsDialog.Init()
 
 	case dialog.CloseMultiArgumentsDialogMsg:
 		// Close multi-arguments dialog
 		a.showMultiArgumentsDialog = false
 
-		// If submitted, replace all named arguments and run the command
+		// If submitted, handle the arguments
 		if msg.Submit {
+			// If we have a custom handler, use it
+			if a.multiArgumentsHandler != nil {
+				return a, a.multiArgumentsHandler(msg.Args)
+			}
+			
+			// Otherwise, use the traditional approach for custom commands
 			content := msg.Content
 
 			// Replace each named argument with its value
@@ -703,6 +723,69 @@ func (a *appModel) RegisterCommand(cmd dialog.Command) {
 	a.commands = append(a.commands, cmd)
 }
 
+// RegisterMCPPrompts registers all MCP prompts as commands
+func (a *appModel) RegisterMCPPrompts(ctx context.Context) {
+	prompts := agent.GetMCPPrompts(ctx)
+	for _, prompt := range prompts {
+		// Create a copy of the prompt for the closure
+		p := prompt
+		
+		// Create command ID in the format <server_name>:<prompt_name>
+		commandID := fmt.Sprintf("%s:%s", p.ServerName, p.Name)
+		
+		// Create command
+		cmd := dialog.Command{
+			ID:          commandID,
+			Title:       commandID,
+			Description: p.Description,
+			Handler: func(cmd dialog.Command) tea.Cmd {
+				// If the prompt has arguments, show the arguments dialog
+				if len(p.Arguments) > 0 {
+					// Convert MCPPromptArgument to dialog.Argument
+					var args []dialog.Argument
+					for _, arg := range p.Arguments {
+						args = append(args, dialog.Argument{
+							Name:        arg.Name,
+							Description: arg.Description,
+							Required:    arg.Required,
+						})
+					}
+					
+					return util.CmdHandler(dialog.ShowMultiArgumentsDialogMsg{
+						CommandID: cmd.ID,
+						Arguments: args,
+						Handler: func(values map[string]string) tea.Cmd {
+							return a.executeMCPPrompt(p, values)
+						},
+					})
+				}
+				
+				// No arguments, execute directly
+				return a.executeMCPPrompt(p, nil)
+			},
+		}
+		
+		a.RegisterCommand(cmd)
+	}
+}
+
+// executeMCPPrompt executes an MCP prompt and sends the result as a message
+func (a *appModel) executeMCPPrompt(prompt agent.MCPPrompt, args map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		// Execute the prompt
+		result, err := agent.ExecutePrompt(context.Background(), prompt, args)
+		if err != nil {
+			status.Error(fmt.Sprintf("Failed to execute prompt: %v", err))
+			return nil
+		}
+		
+		// Send the result as a message
+		return chat.SendMsg{
+			Text: result,
+		}
+	}
+}
+
 // getAvailableToolNames returns a list of all available tool names
 func getAvailableToolNames(app *app.App) []string {
 	// Get primary agent tools (which already include MCP tools)
@@ -1017,6 +1100,8 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 			model.RegisterCommand(cmd)
 		}
 	}
+
+	model.RegisterMCPPrompts(context.Background())
 
 	return model
 }

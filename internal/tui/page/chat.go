@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/completions"
+	"github.com/sst/opencode/internal/llm/agent"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/session"
 	"github.com/sst/opencode/internal/status"
@@ -95,6 +96,25 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle custom command execution
 		cmd := p.sendMessage(content, nil)
+		if cmd != nil {
+			return p, cmd
+		}
+	case dialog.MCPPromptRunMsg:
+		// Check if the agent is busy before executing MCP prompt commands
+		if p.app.PrimaryAgent.IsBusy() {
+			status.Warn("Agent is busy, please wait before executing a command...")
+			return p, nil
+		}
+
+		// Execute the MCP prompt
+		promptText, err := agent.ExecutePrompt(context.Background(), msg.Prompt, msg.Args)
+		if err != nil {
+			status.Error(fmt.Sprintf("Failed to execute MCP prompt: %v", err))
+			return p, nil
+		}
+
+		// Send the prompt text as a message
+		cmd := p.sendMessage(promptText, nil)
 		if cmd != nil {
 			return p, cmd
 		}
