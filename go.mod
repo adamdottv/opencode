@@ -22,7 +22,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/lrstanley/bubblezone v0.0.0-20250315020633-c249a3fe1231
-	github.com/mark3labs/mcp-go v0.17.0
+	github.com/mark3labs/mcp-go v0.28.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
