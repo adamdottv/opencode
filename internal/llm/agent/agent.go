@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
-
-	"log/slog"
 
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/llm/models"
