@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/completions"
+	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/session"
 	"github.com/sst/opencode/internal/status"
@@ -250,6 +251,19 @@ func NewChatPage(app *app.App) tea.Model {
 		chat.NewEditorCmp(app),
 		layout.WithBorder(true, false, false, false),
 	)
+	
+	// Get keymaps from config
+	cfg := config.Get()
+	if cfg != nil {
+		configKeyMap := cfg.GetChatKeyMap()
+		keyMap = ChatKeyMap{
+			NewSession:           configKeyMap.NewSession,
+			Cancel:               configKeyMap.Cancel,
+			ToggleTools:          configKeyMap.ToggleTools,
+			ShowCompletionDialog: configKeyMap.ShowCompletionDialog,
+		}
+	}
+	
 	return &chatPage{
 		app:              app,
 		editor:           editorContainer,
