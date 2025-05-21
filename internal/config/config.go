@@ -79,6 +79,12 @@ type ShellConfig struct {
 	Args []string `json:"args,omitempty"`
 }
 
+// IgnoreConfig defines which folders to ignore while grepping
+// through the codebase
+type IgnoreConfig struct {
+	Folders []string `json:"folders,omitempty"`
+}
+
 // Config is the main configuration structure for the application.
 type Config struct {
 	Data         Data                              `json:"data"`
@@ -92,6 +98,7 @@ type Config struct {
 	ContextPaths []string                          `json:"contextPaths,omitempty"`
 	TUI          TUIConfig                         `json:"tui"`
 	Shell        ShellConfig                       `json:"shell,omitempty"`
+	Ignore		 	 IgnoreConfig											 `json:"ignore,omitempty"`
 }
 
 // Application constants
