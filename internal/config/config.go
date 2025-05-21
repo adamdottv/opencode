@@ -98,7 +98,7 @@ type Config struct {
 	ContextPaths []string                          `json:"contextPaths,omitempty"`
 	TUI          TUIConfig                         `json:"tui"`
 	Shell        ShellConfig                       `json:"shell,omitempty"`
-	Ignore		 	 IgnoreConfig											 `json:"ignore,omitempty"`
+	Ignore       IgnoreConfig                      `json:"ignore,omitempty"`
 }
 
 // Application constants
