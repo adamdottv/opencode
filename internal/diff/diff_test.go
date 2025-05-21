@@ -65,11 +65,11 @@ func TestApplyHighlighting(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			result := applyHighlighting(tc.content, tc.segments, tc.segmentType, mockHighlightBg)
-			
+
 			// Verify the result contains the expected sequence
-			assert.Contains(t, result, tc.expectContains, 
+			assert.Contains(t, result, tc.expectContains,
 				"Result should contain full reset sequence")
-			
+
 			// Print the result for manual inspection if needed
 			if t.Failed() {
 				fmt.Printf("Original: %q\nResult: %q\n", tc.content, result)

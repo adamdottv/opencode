@@ -29,33 +29,8 @@ type chatPage struct {
 	messages             layout.Container
 	layout               layout.SplitPaneLayout
 	completionDialog     dialog.CompletionDialog
+	keyMap               config.ChatKeyMap
 	showCompletionDialog bool
-}
-
-type ChatKeyMap struct {
-	NewSession           key.Binding
-	Cancel               key.Binding
-	ToggleTools          key.Binding
-	ShowCompletionDialog key.Binding
-}
-
-var keyMap = ChatKeyMap{
-	NewSession: key.NewBinding(
-		key.WithKeys("ctrl+n"),
-		key.WithHelp("ctrl+n", "new session"),
-	),
-	Cancel: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "cancel"),
-	),
-	ToggleTools: key.NewBinding(
-		key.WithKeys("ctrl+h"),
-		key.WithHelp("ctrl+h", "toggle tools"),
-	),
-	ShowCompletionDialog: key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "Complete"),
-	),
 }
 
 func (p *chatPage) Init() tea.Cmd {
@@ -126,23 +101,23 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.showCompletionDialog = false
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, keyMap.ShowCompletionDialog):
+		case key.Matches(msg, p.keyMap.ShowCompletionDialog):
 			p.showCompletionDialog = true
 			// Continue sending keys to layout->chat
-		case key.Matches(msg, keyMap.NewSession):
+		case key.Matches(msg, p.keyMap.NewSession):
 			p.app.CurrentSession = &session.Session{}
 			return p, tea.Batch(
 				p.clearSidebar(),
 				util.CmdHandler(state.SessionClearedMsg{}),
 			)
-		case key.Matches(msg, keyMap.Cancel):
+		case key.Matches(msg, p.keyMap.Cancel):
 			if p.app.CurrentSession.ID != "" {
 				// Cancel the current session's generation process
 				// This allows users to interrupt long-running operations
 				p.app.PrimaryAgent.Cancel(p.app.CurrentSession.ID)
 				return p, nil
 			}
-		case key.Matches(msg, keyMap.ToggleTools):
+		case key.Matches(msg, p.keyMap.ToggleTools):
 			return p, util.CmdHandler(chat.ToggleToolMessagesMsg{})
 		}
 	}
@@ -234,7 +209,7 @@ func (p *chatPage) View() string {
 }
 
 func (p *chatPage) BindingKeys() []key.Binding {
-	bindings := layout.KeyMapToSlice(keyMap)
+	bindings := layout.KeyMapToSlice(p.keyMap)
 	bindings = append(bindings, p.messages.BindingKeys()...)
 	bindings = append(bindings, p.editor.BindingKeys()...)
 	return bindings
@@ -251,24 +226,20 @@ func NewChatPage(app *app.App) tea.Model {
 		chat.NewEditorCmp(app),
 		layout.WithBorder(true, false, false, false),
 	)
-	
+
 	// Get keymaps from config
 	cfg := config.Get()
-	if cfg != nil {
-		configKeyMap := cfg.GetChatKeyMap()
-		keyMap = ChatKeyMap{
-			NewSession:           configKeyMap.NewSession,
-			Cancel:               configKeyMap.Cancel,
-			ToggleTools:          configKeyMap.ToggleTools,
-			ShowCompletionDialog: configKeyMap.ShowCompletionDialog,
-		}
+	if cfg == nil {
+		panic("config is nil")
 	}
-	
+
+	keyMap := cfg.GetChatKeyMap()
 	return &chatPage{
 		app:              app,
 		editor:           editorContainer,
 		messages:         messagesContainer,
 		completionDialog: completionDialog,
+		keyMap:           keyMap,
 		layout: layout.NewSplitPane(
 			layout.WithLeftPanel(messagesContainer),
 			layout.WithBottomPanel(editorContainer),

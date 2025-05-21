@@ -1,4 +1,3 @@
-// Package config manages application configuration from various sources.
 package config
 
 import (
@@ -7,23 +6,13 @@ import (
 
 // KeyMapConfig defines the configuration for keyboard shortcuts
 type KeyMapConfig struct {
-	Chat     *ChatKeyMapConfig     `json:"chat,omitempty"`
-	Global   *GlobalKeyMapConfig   `json:"global,omitempty"`
-	Editor   *EditorKeyMapConfig   `json:"editor,omitempty"`
-	Messages *MessagesKeyMapConfig `json:"messages,omitempty"`
-	Logs     *LogsKeyMapConfig     `json:"logs,omitempty"`
-}
-
-// ChatKeyMapConfig defines keyboard shortcuts for the chat page
-type ChatKeyMapConfig struct {
+	// Chat keymaps
 	NewSession           []string `json:"newSession,omitempty"`
 	Cancel               []string `json:"cancel,omitempty"`
 	ToggleTools          []string `json:"toggleTools,omitempty"`
 	ShowCompletionDialog []string `json:"showCompletionDialog,omitempty"`
-}
 
-// GlobalKeyMapConfig defines keyboard shortcuts for global application functions
-type GlobalKeyMapConfig struct {
+	// Global keymaps
 	ViewLogs      []string `json:"viewLogs,omitempty"`
 	Quit          []string `json:"quit,omitempty"`
 	Help          []string `json:"help,omitempty"`
@@ -33,56 +22,49 @@ type GlobalKeyMapConfig struct {
 	Models        []string `json:"models,omitempty"`
 	Theme         []string `json:"theme,omitempty"`
 	Tools         []string `json:"tools,omitempty"`
-}
 
-// EditorKeyMapConfig defines keyboard shortcuts for the text editor
-type EditorKeyMapConfig struct {
+	// Editor keymaps
 	Submit []string `json:"submit,omitempty"`
 	Clear  []string `json:"clear,omitempty"`
-}
 
-// MessagesKeyMapConfig defines keyboard shortcuts for message navigation
-type MessagesKeyMapConfig struct {
+	// Messages keymaps
 	HalfPageUp   []string `json:"halfPageUp,omitempty"`
 	HalfPageDown []string `json:"halfPageDown,omitempty"`
-}
 
-// LogsKeyMapConfig defines keyboard shortcuts for logs page navigation
-type LogsKeyMapConfig struct {
+	// Logs keymaps
 	Back []string `json:"back,omitempty"`
 }
 
 // DefaultKeyMapConfig returns the default keyboard shortcut configuration
 func DefaultKeyMapConfig() *KeyMapConfig {
 	return &KeyMapConfig{
-		Chat: &ChatKeyMapConfig{
-			NewSession:           []string{"ctrl+n"},
-			Cancel:               []string{"esc"},
-			ToggleTools:          []string{"ctrl+h"},
-			ShowCompletionDialog: []string{"/"},
-		},
-		Global: &GlobalKeyMapConfig{
-			ViewLogs:      []string{"ctrl+l"},
-			Quit:          []string{"ctrl+c"},
-			Help:          []string{"ctrl+_"},
-			SwitchSession: []string{"ctrl+s"},
-			Commands:      []string{"ctrl+k"},
-			FilePicker:    []string{"ctrl+f"},
-			Models:        []string{"ctrl+o"},
-			Theme:         []string{"ctrl+t"},
-			Tools:         []string{"f9"},
-		},
-		Editor: &EditorKeyMapConfig{
-			Submit: []string{"ctrl+j", "ctrl+enter"},
-			Clear:  []string{"ctrl+u"},
-		},
-		Messages: &MessagesKeyMapConfig{
-			HalfPageUp:   []string{"ctrl+u"},
-			HalfPageDown: []string{"ctrl+d"},
-		},
-		Logs: &LogsKeyMapConfig{
-			Back: []string{"esc"},
-		},
+		// Chat keymaps
+		NewSession:           []string{"ctrl+n"},
+		Cancel:               []string{"esc"},
+		ToggleTools:          []string{"ctrl+h"},
+		ShowCompletionDialog: []string{"/"},
+
+		// Global keymaps
+		ViewLogs:      []string{"ctrl+l"},
+		Quit:          []string{"ctrl+c"},
+		Help:          []string{"ctrl+_"},
+		SwitchSession: []string{"ctrl+s"},
+		Commands:      []string{"ctrl+k"},
+		FilePicker:    []string{"ctrl+f"},
+		Models:        []string{"ctrl+o"},
+		Theme:         []string{"ctrl+t"},
+		Tools:         []string{"f9"},
+
+		// Editor keymaps
+		Submit: []string{"ctrl+j", "ctrl+enter"},
+		Clear:  []string{"ctrl+u"},
+
+		// Messages keymaps
+		HalfPageUp:   []string{"ctrl+u"},
+		HalfPageDown: []string{"ctrl+d"},
+
+		// Logs keymaps
+		Back: []string{"esc"},
 	}
 }
 
@@ -117,7 +99,7 @@ func (c *Config) GetAllKeyBinding() []key.Binding {
 
 // GetChatKeyMap returns a ChatKeyMap with bindings from config
 func (c *Config) GetChatKeyMap() ChatKeyMap {
-	keys := c.KeyMaps.Chat
+	keys := c.KeyMaps
 
 	out := ChatKeyMap{
 		NewSession: key.NewBinding(
@@ -164,12 +146,12 @@ type GlobalKeyMap struct {
 
 // GetGlobalKeyMap returns a GlobalKeyMap with bindings from config
 func (c *Config) GetGlobalKeyMap() GlobalKeyMap {
-	keys := c.KeyMaps.Global
+	keys := c.KeyMaps
 
 	return GlobalKeyMap{
 		ViewLogs: key.NewBinding(
 			key.WithKeys(keys.ViewLogs...),
-			key.WithHelp(keys.ViewLogs[0], "view logs"),
+			key.WithHelp(keys.ViewLogs[0], "logs"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys(keys.Quit...),
@@ -177,7 +159,7 @@ func (c *Config) GetGlobalKeyMap() GlobalKeyMap {
 		),
 		Help: key.NewBinding(
 			key.WithKeys(keys.Help...),
-			key.WithHelp("ctrl+?", "help"), // Special case for display
+			key.WithHelp("ctrl+?", "toggle help"),
 		),
 		SwitchSession: key.NewBinding(
 			key.WithKeys(keys.SwitchSession...),
@@ -189,19 +171,19 @@ func (c *Config) GetGlobalKeyMap() GlobalKeyMap {
 		),
 		FilePicker: key.NewBinding(
 			key.WithKeys(keys.FilePicker...),
-			key.WithHelp(keys.FilePicker[0], "file picker"),
+			key.WithHelp(keys.FilePicker[0], "select files to upload"),
 		),
 		Models: key.NewBinding(
 			key.WithKeys(keys.Models...),
-			key.WithHelp(keys.Models[0], "models"),
+			key.WithHelp(keys.Models[0], "model selection"),
 		),
 		Theme: key.NewBinding(
 			key.WithKeys(keys.Theme...),
-			key.WithHelp(keys.Theme[0], "theme"),
+			key.WithHelp(keys.Theme[0], "switch theme"),
 		),
 		Tools: key.NewBinding(
 			key.WithKeys(keys.Tools...),
-			key.WithHelp(keys.Tools[0], "tools"),
+			key.WithHelp(keys.Tools[0], "show available tools"),
 		),
 	}
 }
@@ -214,7 +196,7 @@ type EditorKeyMap struct {
 
 // GetEditorKeyMap returns an EditorKeyMap with bindings from config
 func (c *Config) GetEditorKeyMap() EditorKeyMap {
-	keys := c.KeyMaps.Editor
+	keys := c.KeyMaps
 
 	return EditorKeyMap{
 		Submit: key.NewBinding(
@@ -236,7 +218,7 @@ type MessagesKeyMap struct {
 
 // GetMessagesKeyMap returns a MessagesKeyMap with bindings from config
 func (c *Config) GetMessagesKeyMap() MessagesKeyMap {
-	keys := c.KeyMaps.Messages
+	keys := c.KeyMaps
 
 	return MessagesKeyMap{
 		HalfPageUp: key.NewBinding(
@@ -257,7 +239,7 @@ type LogsKeyMap struct {
 
 // GetLogsKeyMap returns a LogsKeyMap with bindings from config
 func (c *Config) GetLogsKeyMap() LogsKeyMap {
-	keys := c.KeyMaps.Logs
+	keys := c.KeyMaps
 
 	return LogsKeyMap{
 		Back: key.NewBinding(
@@ -270,87 +252,67 @@ func (c *Config) GetLogsKeyMap() LogsKeyMap {
 // mergeKeyMaps merges user-provided keymaps with default keymaps
 // If a keymap is not provided by the user, the default is used
 func mergeKeyMaps(userKeyMaps, defaultKeyMaps *KeyMapConfig) {
-	// Merge Chat keymaps
-	if userKeyMaps.Chat == nil {
-		userKeyMaps.Chat = defaultKeyMaps.Chat
-	} else {
-		if userKeyMaps.Chat.NewSession == nil {
-			userKeyMaps.Chat.NewSession = defaultKeyMaps.Chat.NewSession
-		}
-		if userKeyMaps.Chat.Cancel == nil {
-			userKeyMaps.Chat.Cancel = defaultKeyMaps.Chat.Cancel
-		}
-		if userKeyMaps.Chat.ToggleTools == nil {
-			userKeyMaps.Chat.ToggleTools = defaultKeyMaps.Chat.ToggleTools
-		}
-		if userKeyMaps.Chat.ShowCompletionDialog == nil {
-			userKeyMaps.Chat.ShowCompletionDialog = defaultKeyMaps.Chat.ShowCompletionDialog
-		}
+	// Chat keymaps
+	if userKeyMaps.NewSession == nil {
+		userKeyMaps.NewSession = defaultKeyMaps.NewSession
+	}
+	if userKeyMaps.Cancel == nil {
+		userKeyMaps.Cancel = defaultKeyMaps.Cancel
+	}
+	if userKeyMaps.ToggleTools == nil {
+		userKeyMaps.ToggleTools = defaultKeyMaps.ToggleTools
+	}
+	if userKeyMaps.ShowCompletionDialog == nil {
+		userKeyMaps.ShowCompletionDialog = defaultKeyMaps.ShowCompletionDialog
 	}
 
-	// Merge Global keymaps
-	if userKeyMaps.Global == nil {
-		userKeyMaps.Global = defaultKeyMaps.Global
-	} else {
-		if userKeyMaps.Global.ViewLogs == nil {
-			userKeyMaps.Global.ViewLogs = defaultKeyMaps.Global.ViewLogs
-		}
-		if userKeyMaps.Global.Quit == nil {
-			userKeyMaps.Global.Quit = defaultKeyMaps.Global.Quit
-		}
-		if userKeyMaps.Global.Help == nil {
-			userKeyMaps.Global.Help = defaultKeyMaps.Global.Help
-		}
-		if userKeyMaps.Global.SwitchSession == nil {
-			userKeyMaps.Global.SwitchSession = defaultKeyMaps.Global.SwitchSession
-		}
-		if userKeyMaps.Global.Commands == nil {
-			userKeyMaps.Global.Commands = defaultKeyMaps.Global.Commands
-		}
-		if userKeyMaps.Global.FilePicker == nil {
-			userKeyMaps.Global.FilePicker = defaultKeyMaps.Global.FilePicker
-		}
-		if userKeyMaps.Global.Models == nil {
-			userKeyMaps.Global.Models = defaultKeyMaps.Global.Models
-		}
-		if userKeyMaps.Global.Theme == nil {
-			userKeyMaps.Global.Theme = defaultKeyMaps.Global.Theme
-		}
-		if userKeyMaps.Global.Tools == nil {
-			userKeyMaps.Global.Tools = defaultKeyMaps.Global.Tools
-		}
+	// Global keymaps
+	if userKeyMaps.ViewLogs == nil {
+		userKeyMaps.ViewLogs = defaultKeyMaps.ViewLogs
+	}
+	if userKeyMaps.Quit == nil {
+		userKeyMaps.Quit = defaultKeyMaps.Quit
+	}
+	if userKeyMaps.Help == nil {
+		userKeyMaps.Help = defaultKeyMaps.Help
+	}
+	if userKeyMaps.SwitchSession == nil {
+		userKeyMaps.SwitchSession = defaultKeyMaps.SwitchSession
+	}
+	if userKeyMaps.Commands == nil {
+		userKeyMaps.Commands = defaultKeyMaps.Commands
+	}
+	if userKeyMaps.FilePicker == nil {
+		userKeyMaps.FilePicker = defaultKeyMaps.FilePicker
+	}
+	if userKeyMaps.Models == nil {
+		userKeyMaps.Models = defaultKeyMaps.Models
+	}
+	if userKeyMaps.Theme == nil {
+		userKeyMaps.Theme = defaultKeyMaps.Theme
+	}
+	if userKeyMaps.Tools == nil {
+		userKeyMaps.Tools = defaultKeyMaps.Tools
 	}
 
-	// Merge Editor keymaps
-	if userKeyMaps.Editor == nil {
-		userKeyMaps.Editor = defaultKeyMaps.Editor
-	} else {
-		if userKeyMaps.Editor.Submit == nil {
-			userKeyMaps.Editor.Submit = defaultKeyMaps.Editor.Submit
-		}
-		if userKeyMaps.Editor.Clear == nil {
-			userKeyMaps.Editor.Clear = defaultKeyMaps.Editor.Clear
-		}
+	// Editor keymaps
+	if userKeyMaps.Submit == nil {
+		userKeyMaps.Submit = defaultKeyMaps.Submit
+	}
+	if userKeyMaps.Clear == nil {
+		userKeyMaps.Clear = defaultKeyMaps.Clear
 	}
 
-	// Merge Messages keymaps
-	if userKeyMaps.Messages == nil {
-		userKeyMaps.Messages = defaultKeyMaps.Messages
-	} else {
-		if userKeyMaps.Messages.HalfPageUp == nil {
-			userKeyMaps.Messages.HalfPageUp = defaultKeyMaps.Messages.HalfPageUp
-		}
-		if userKeyMaps.Messages.HalfPageDown == nil {
-			userKeyMaps.Messages.HalfPageDown = defaultKeyMaps.Messages.HalfPageDown
-		}
+	// Messages keymaps
+	if userKeyMaps.HalfPageUp == nil {
+		userKeyMaps.HalfPageUp = defaultKeyMaps.HalfPageUp
+	}
+	if userKeyMaps.HalfPageDown == nil {
+		userKeyMaps.HalfPageDown = defaultKeyMaps.HalfPageDown
 	}
 
-	// Merge Logs keymaps
-	if userKeyMaps.Logs == nil {
-		userKeyMaps.Logs = defaultKeyMaps.Logs
-	} else {
-		if userKeyMaps.Logs.Back == nil {
-			userKeyMaps.Logs.Back = defaultKeyMaps.Logs.Back
-		}
+	// Logs keymaps
+	if userKeyMaps.Back == nil {
+		userKeyMaps.Back = defaultKeyMaps.Back
 	}
 }
