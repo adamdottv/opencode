@@ -29,6 +29,8 @@ type MCPClient interface {
 	) (*mcp.InitializeResult, error)
 	ListTools(ctx context.Context, request mcp.ListToolsRequest) (*mcp.ListToolsResult, error)
 	CallTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	ListPrompts(ctx context.Context, request mcp.ListPromptsRequest) (*mcp.ListPromptsResult, error)
+	GetPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error)
 	Close() error
 }
 
@@ -134,8 +136,6 @@ func NewMcpTool(name string, tool mcp.Tool, permissions permission.Service, mcpC
 	}
 }
 
-var mcpTools []tools.BaseTool
-
 func getTools(ctx context.Context, name string, m config.MCPServer, permissions permission.Service, c MCPClient) []tools.BaseTool {
 	var stdioTools []tools.BaseTool
 	initRequest := mcp.InitializeRequest{}
@@ -161,38 +161,4 @@ func getTools(ctx context.Context, name string, m config.MCPServer, permissions 
 	}
 	defer c.Close()
 	return stdioTools
-}
-
-func GetMcpTools(ctx context.Context, permissions permission.Service) []tools.BaseTool {
-	if len(mcpTools) > 0 {
-		return mcpTools
-	}
-	for name, m := range config.Get().MCPServers {
-		switch m.Type {
-		case config.MCPStdio:
-			c, err := client.NewStdioMCPClient(
-				m.Command,
-				m.Env,
-				m.Args...,
-			)
-			if err != nil {
-				slog.Error("error creating mcp client", "error", err)
-				continue
-			}
-
-			mcpTools = append(mcpTools, getTools(ctx, name, m, permissions, c)...)
-		case config.MCPSse:
-			c, err := client.NewSSEMCPClient(
-				m.URL,
-				client.WithHeaders(m.Headers),
-			)
-			if err != nil {
-				slog.Error("error creating mcp client", "error", err)
-				continue
-			}
-			mcpTools = append(mcpTools, getTools(ctx, name, m, permissions, c)...)
-		}
-	}
-
-	return mcpTools
 }
