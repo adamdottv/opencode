@@ -30,65 +30,9 @@ import (
 	"github.com/sst/opencode/internal/tui/util"
 )
 
-type keyMap struct {
-	Logs          key.Binding
-	Quit          key.Binding
-	Help          key.Binding
-	SwitchSession key.Binding
-	Commands      key.Binding
-	Filepicker    key.Binding
-	Models        key.Binding
-	SwitchTheme   key.Binding
-	Tools         key.Binding
-}
-
 const (
 	quitKey = "q"
 )
-
-var keys = keyMap{
-	Logs: key.NewBinding(
-		key.WithKeys("ctrl+l"),
-		key.WithHelp("ctrl+l", "logs"),
-	),
-
-	Quit: key.NewBinding(
-		key.WithKeys("ctrl+c"),
-		key.WithHelp("ctrl+c", "quit"),
-	),
-	Help: key.NewBinding(
-		key.WithKeys("ctrl+_"),
-		key.WithHelp("ctrl+?", "toggle help"),
-	),
-
-	SwitchSession: key.NewBinding(
-		key.WithKeys("ctrl+s"),
-		key.WithHelp("ctrl+s", "switch session"),
-	),
-
-	Commands: key.NewBinding(
-		key.WithKeys("ctrl+k"),
-		key.WithHelp("ctrl+k", "commands"),
-	),
-	Filepicker: key.NewBinding(
-		key.WithKeys("ctrl+f"),
-		key.WithHelp("ctrl+f", "select files to upload"),
-	),
-	Models: key.NewBinding(
-		key.WithKeys("ctrl+o"),
-		key.WithHelp("ctrl+o", "model selection"),
-	),
-
-	SwitchTheme: key.NewBinding(
-		key.WithKeys("ctrl+t"),
-		key.WithHelp("ctrl+t", "switch theme"),
-	),
-	
-	Tools: key.NewBinding(
-		key.WithKeys("f9"),
-		key.WithHelp("f9", "show available tools"),
-	),
-}
 
 var helpEsc = key.NewBinding(
 	key.WithKeys("?"),
@@ -113,6 +57,7 @@ type appModel struct {
 	loadedPages   map[page.PageID]bool
 	status        core.StatusCmp
 	app           *app.App
+	keymap        config.GlobalKeyMap
 
 	showPermissions bool
 	permissions     dialog.PermissionDialogCmp
@@ -144,7 +89,7 @@ type appModel struct {
 
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
-	
+
 	showToolsDialog bool
 	toolsDialog     dialog.ToolsDialog
 }
@@ -299,11 +244,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
 		return a, nil
-		
+
 	case dialog.CloseToolsDialogMsg:
 		a.showToolsDialog = false
 		return a, nil
-		
+
 	case dialog.ShowToolsDialogMsg:
 		a.showToolsDialog = msg.Show
 		return a, nil
@@ -403,7 +348,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch {
-		case key.Matches(msg, keys.Quit):
+		case key.Matches(msg, a.keymap.Quit):
 			a.showQuit = !a.showQuit
 			if a.showHelp {
 				a.showHelp = false
@@ -429,14 +374,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 			}
 			return a, nil
-		case key.Matches(msg, keys.SwitchSession):
+		case key.Matches(msg, a.keymap.SwitchSession):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showCommandDialog {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showThemeDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				// Load sessions and show the dialog
 				sessions, err := a.app.Sessions.List(context.Background())
 				if err != nil {
@@ -452,12 +397,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a, nil
-		case key.Matches(msg, keys.Commands):
+		case key.Matches(msg, a.keymap.Commands):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showThemeDialog && !a.showFilepicker {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showModelDialog = false
-				
+
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -468,7 +413,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a, nil
-		case key.Matches(msg, keys.Models):
+		case key.Matches(msg, a.keymap.Models):
 			if a.showModelDialog {
 				a.showModelDialog = false
 				return a, nil
@@ -478,28 +423,28 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showThemeDialog = false
 				a.showFilepicker = false
-				
+
 				a.showModelDialog = true
 				return a, nil
 			}
 			return a, nil
-		case key.Matches(msg, keys.SwitchTheme):
+		case key.Matches(msg, a.keymap.Theme):
 			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
-		case key.Matches(msg, keys.Tools):
+		case key.Matches(msg, a.keymap.Tools):
 			// Check if any other dialog is open
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
-			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
-			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
-			   !a.showMultiArgumentsDialog {
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions &&
+				!a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog &&
+				!a.showFilepicker && !a.showModelDialog && !a.showInitDialog &&
+				!a.showMultiArgumentsDialog {
 				// Toggle tools dialog
 				a.showToolsDialog = !a.showToolsDialog
 				if a.showToolsDialog {
@@ -548,14 +493,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, a.moveToPageUnconditional(page.ChatPage)
 				}
 			}
-		case key.Matches(msg, keys.Logs):
+		case key.Matches(msg, a.keymap.ViewLogs):
 			return a, a.moveToPage(page.LogsPage)
-		case key.Matches(msg, keys.Help):
+		case key.Matches(msg, a.keymap.Help):
 			if a.showQuit {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
-			
+
 			// Close other dialogs if opening help
 			if a.showHelp {
 				a.showToolsDialog = false
@@ -569,12 +514,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showHelp = !a.showHelp
 				return a, nil
 			}
-		case key.Matches(msg, keys.Filepicker):
+		case key.Matches(msg, a.keymap.FilePicker):
 			// Toggle filepicker
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
 			a.app.SetFilepickerOpen(a.showFilepicker)
-			
+
 			// Close other dialogs if opening filepicker
 			if a.showFilepicker {
 				a.showToolsDialog = false
@@ -681,7 +626,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
-	
+
 	if a.showToolsDialog {
 		d, toolsCmd := a.toolsDialog.Update(msg)
 		a.toolsDialog = d.(dialog.ToolsDialog)
@@ -716,13 +661,13 @@ func getAvailableToolNames(app *app.App) []string {
 		app.History,
 		app.LSPClients,
 	)
-	
+
 	// Extract tool names
 	var toolNames []string
 	for _, tool := range allTools {
 		toolNames = append(toolNames, tool.Info().Name)
 	}
-	
+
 	return toolNames
 }
 
@@ -802,7 +747,7 @@ func (a appModel) View() string {
 	}
 
 	if a.showHelp {
-		bindings := layout.KeyMapToSlice(keys)
+		bindings := layout.KeyMapToSlice(a.keymap)
 		if p, ok := a.pages[a.currentPage].(layout.Bindings); ok {
 			bindings = append(bindings, p.BindingKeys()...)
 		}
@@ -815,6 +760,7 @@ func (a appModel) View() string {
 		if !a.app.PrimaryAgent.IsBusy() {
 			bindings = append(bindings, helpEsc)
 		}
+
 		a.help.SetBindings(bindings)
 
 		overlay := a.help.View()
@@ -931,7 +877,7 @@ func (a appModel) View() string {
 			true,
 		)
 	}
-	
+
 	if a.showToolsDialog {
 		overlay := a.toolsDialog.View()
 		row := lipgloss.Height(appView) / 2
@@ -952,6 +898,10 @@ func (a appModel) View() string {
 
 func New(app *app.App) tea.Model {
 	startPage := page.ChatPage
+	cfg := config.Get()
+	if cfg == nil {
+		panic("config is nil")
+	}
 	model := &appModel{
 		currentPage:   startPage,
 		loadedPages:   make(map[page.PageID]bool),
@@ -966,6 +916,7 @@ func New(app *app.App) tea.Model {
 		themeDialog:   dialog.NewThemeDialogCmp(),
 		toolsDialog:   dialog.NewToolsDialogCmp(),
 		app:           app,
+		keymap:        cfg.GetGlobalKeyMap(),
 		commands:      []dialog.Command{},
 		pages: map[page.PageID]tea.Model{
 			page.ChatPage: page.NewChatPage(app),

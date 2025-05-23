@@ -74,8 +74,21 @@ func (h *helpCmp) render() string {
 	var (
 		pairs []string
 		width int
-		rows  = 12 - 2
 	)
+
+	var rows int
+	if len(bindings) == 0 {
+		rows = 1 // Default, loop won't run if len(bindings) is 0.
+	} else if len(bindings) == 1 {
+		rows = 1
+	} else { // len(bindings) >= 2
+		maxItemsVertically := max(h.height-6, 1)
+
+		// Target items per column segment to achieve at least two columns.
+		// (len(bindings) + numColumns - 1) / numColumns for ceiling division.
+		itemsToTargetForTwoCols := (len(bindings) + 2 - 1) / 2
+		rows = max(min(maxItemsVertically, itemsToTargetForTwoCols), 1)
+	}
 
 	for i := 0; i < len(bindings); i += rows {
 		var (

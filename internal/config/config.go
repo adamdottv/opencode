@@ -91,7 +91,8 @@ type Config struct {
 	DebugLSP     bool                              `json:"debugLSP,omitempty"`
 	ContextPaths []string                          `json:"contextPaths,omitempty"`
 	TUI          TUIConfig                         `json:"tui"`
-	Shell        ShellConfig                       `json:"shell,omitempty"`
+	Shell        ShellConfig                       `json:"shell"`
+	KeyMaps      *KeyMapConfig                     `json:"keyMaps,omitempty"`
 }
 
 // Application constants
@@ -153,6 +154,15 @@ func Load(workingDir string, debug bool, lvl *slog.LevelVar) (*Config, error) {
 	// Apply configuration to the struct
 	if err := viper.Unmarshal(cfg); err != nil {
 		return cfg, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Set default keymaps or merge with user-provided keymaps
+	if cfg.KeyMaps == nil {
+		cfg.KeyMaps = DefaultKeyMapConfig()
+	} else {
+		// Merge user-provided keymaps with default keymaps
+		defaultKeyMaps := DefaultKeyMapConfig()
+		mergeKeyMaps(cfg.KeyMaps, defaultKeyMaps)
 	}
 
 	applyDefaultValues()
