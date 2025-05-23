@@ -256,9 +256,9 @@ func setProviderDefaults() {
 
 	// Anthropic configuration
 	if key := viper.GetString("providers.anthropic.apiKey"); strings.TrimSpace(key) != "" {
-		viper.SetDefault("agents.primary.model", models.Claude37Sonnet)
-		viper.SetDefault("agents.task.model", models.Claude37Sonnet)
-		viper.SetDefault("agents.title.model", models.Claude37Sonnet)
+		viper.SetDefault("agents.primary.model", models.Claude4Sonnet)
+		viper.SetDefault("agents.task.model", models.Claude4Sonnet)
+		viper.SetDefault("agents.title.model", models.Claude4Sonnet)
 		return
 	}
 
@@ -606,7 +606,7 @@ func setDefaultModelForAgent(agent AgentName) bool {
 			maxTokens = 80
 		}
 		cfg.Agents[agent] = Agent{
-			Model:     models.Claude37Sonnet,
+			Model:     models.Claude4Sonnet,
 			MaxTokens: maxTokens,
 		}
 		return true
