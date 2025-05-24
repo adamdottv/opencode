@@ -293,7 +293,9 @@ func main() {
 }
 ```
 
-In this mode, OpenCode will process your prompt, print the result to standard output, and then exit. All permissions are auto-approved for the session.
+Start opencode in watch mode
+Write a comment ending with 'opencode!' in your editor
+Save the file to send the message
 
 ### Tool Restrictions
 
@@ -328,6 +330,7 @@ The output format is implemented as a strongly-typed `OutputFormat` in the codeb
 | `--verbose`       |       | Display logs to stderr in non-interactive mode      |
 | `--allowedTools`  |       | Restrict the agent to only use specified tools      |
 | `--excludedTools` |       | Prevent the agent from using specified tools        |
+| `--watch`         | `-w`  | Send messages from your editor in watch mode        |
 
 ## Keyboard Shortcuts
 
