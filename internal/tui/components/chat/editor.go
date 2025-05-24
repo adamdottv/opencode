@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/message"
+	"github.com/sst/opencode/internal/setup"
 	"github.com/sst/opencode/internal/status"
 	"github.com/sst/opencode/internal/tui/components/dialog"
 	"github.com/sst/opencode/internal/tui/image"
@@ -317,14 +318,22 @@ func (m *editorCmp) View() string {
 		Bold(true).
 		Foreground(t.Primary())
 
+	// Only show textarea if setup is complete
+	prefix := ""
+	textarea := ""
+	if setup.IsSetupComplete() {
+		prefix = style.Render(">")
+		textarea = m.textarea.View()
+	}
+
 	if len(m.attachments) == 0 {
-		return lipgloss.JoinHorizontal(lipgloss.Top, style.Render(">"), m.textarea.View())
+		return lipgloss.JoinHorizontal(lipgloss.Top, prefix, textarea)
 	}
 	m.textarea.SetHeight(m.height - 1)
+
 	return lipgloss.JoinVertical(lipgloss.Top,
 		m.attachmentsContent(),
-		lipgloss.JoinHorizontal(lipgloss.Top, style.Render(">"),
-			m.textarea.View()),
+		lipgloss.JoinHorizontal(lipgloss.Top, prefix, textarea),
 	)
 }
 
