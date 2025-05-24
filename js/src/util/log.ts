@@ -1,0 +1,62 @@
+import path from "node:path";
+import { AppPath } from "../app/path";
+export namespace Log {
+  const write = {
+    out: (msg: string) => {
+      process.stdout.write(msg);
+    },
+    err: (msg: string) => {
+      process.stderr.write(msg);
+    },
+  };
+
+  export async function file(directory: string) {
+    const out = Bun.file(
+      path.join(AppPath.data(directory), "opencode.out.log"),
+    );
+    const err = Bun.file(
+      path.join(AppPath.data(directory), "opencode.err.log"),
+    );
+    const outWriter = out.writer();
+    const errWriter = err.writer();
+    write["out"] = (msg) => {
+      outWriter.write(msg);
+      outWriter.flush();
+    };
+    write["err"] = (msg) => {
+      errWriter.write(msg);
+      errWriter.flush();
+    };
+  }
+
+  export function create(tags?: Record<string, any>) {
+    tags = tags || {};
+
+    function build(message: any, extra?: Record<string, any>) {
+      const prefix = Object.entries({
+        ...tags,
+        ...extra,
+      })
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" ");
+      return [new Date().toISOString(), prefix, message].join(" ") + "\n";
+    }
+    const result = {
+      info(message?: any, extra?: Record<string, any>) {
+        write.out(build(message, extra));
+      },
+      error(message?: any, extra?: Record<string, any>) {
+        write.err(build(message, extra));
+      },
+      tag(key: string, value: string) {
+        if (tags) tags[key] = value;
+        return result;
+      },
+      clone() {
+        return Log.create({ ...tags });
+      },
+    };
+
+    return result;
+  }
+}

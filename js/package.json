@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "bun build src/index.ts --compile --outfile ./dist/opencode"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "^1.0.7",
+    "@types/bun": "latest",
+    "@types/react": "18",
+    "ink": "^5.2.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "5"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0-alpha.2",
+    "@flystorage/file-storage": "^1.1.0",
+    "@flystorage/local-fs": "^1.1.0",
+    "@hono/zod-validator": "^0.5.0",
+    "ai": "^5.0.0-alpha.2",
+    "cac": "^6.7.14",
+    "clipanion": "^4.0.0-rc.4",
+    "hono": "^4.7.10",
+    "hono-openapi": "^0.4.8",
+    "ts-lsp-client": "^1.0.3",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageclient": "8",
+    "zod": "^3.25.3",
+    "zod-openapi": "^4.2.4"
+  }
+}
