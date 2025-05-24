@@ -211,7 +211,7 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 		}
 
 		// Use the restricted agent for this request
-		eventCh, err := restrictedAgent.Run(ctx, session.ID, prompt)
+		eventCh, err := restrictedAgent.Run(ctx, session.ID, prompt, false)
 		if err != nil {
 			return fmt.Errorf("failed to run restricted agent: %w", err)
 		}
@@ -251,7 +251,7 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	}
 
 	// Run the default agent if no tool restrictions
-	eventCh, err := app.PrimaryAgent.Run(ctx, session.ID, prompt)
+	eventCh, err := app.PrimaryAgent.Run(ctx, session.ID, prompt, false)
 	if err != nil {
 		return fmt.Errorf("failed to run agent: %w", err)
 	}

@@ -3,12 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"sync"
-	"time"
-
-	"log/slog"
-
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/spf13/cobra"
@@ -22,6 +16,10 @@ import (
 	"github.com/sst/opencode/internal/pubsub"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/internal/version"
+	"log/slog"
+	"os"
+	"sync"
+	"time"
 )
 
 type SessionIDHandler struct {
@@ -106,6 +104,12 @@ to assist developers in writing, debugging, and understanding code directly from
 			excludedTools, _ := cmd.Flags().GetStringSlice("excludedTools")
 
 			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, verbose, allowedTools, excludedTools)
+		}
+
+		// Check if we're in watch mode
+		watch, _ := cmd.Flags().GetBool("watch")
+		if watch {
+			return handleWatchMode(cmd.Context(), cwd)
 		}
 
 		// Run LSP auto-discovery
@@ -322,6 +326,7 @@ func init() {
 	rootCmd.Flags().BoolP("verbose", "", false, "Display logs to stderr in non-interactive mode")
 	rootCmd.Flags().StringSlice("allowedTools", nil, "Restrict the agent to only use the specified tools in non-interactive mode (comma-separated list)")
 	rootCmd.Flags().StringSlice("excludedTools", nil, "Prevent the agent from using the specified tools in non-interactive mode (comma-separated list)")
+	rootCmd.Flags().BoolP("watch", "w", false, "Watch files to send messages using comments ending with 'opencode!'")
 
 	// Make allowedTools and excludedTools mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("allowedTools", "excludedTools")

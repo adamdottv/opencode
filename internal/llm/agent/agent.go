@@ -41,7 +41,7 @@ func (e *AgentEvent) Response() message.Message {
 }
 
 type Service interface {
-	Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-chan AgentEvent, error)
+	Run(ctx context.Context, sessionID string, content string, watchMode bool, attachments ...message.Attachment) (<-chan AgentEvent, error)
 	Cancel(sessionID string)
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
@@ -164,7 +164,7 @@ func (a *agent) err(err error) AgentEvent {
 	}
 }
 
-func (a *agent) Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-chan AgentEvent, error) {
+func (a *agent) Run(ctx context.Context, sessionID string, content string, watchMode bool, attachments ...message.Attachment) (<-chan AgentEvent, error) {
 	if !a.provider.Model().SupportsAttachments && attachments != nil {
 		attachments = nil
 	}
@@ -185,7 +185,7 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 		for _, attachment := range attachments {
 			attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})
 		}
-		result := a.processGeneration(genCtx, sessionID, content, attachmentParts)
+		result := a.processGeneration(genCtx, sessionID, content, watchMode, attachmentParts)
 		if result.Err() != nil && !errors.Is(result.Err(), ErrRequestCancelled) && !errors.Is(result.Err(), context.Canceled) {
 			status.Error(result.Err().Error())
 		}
@@ -251,7 +251,7 @@ func (a *agent) triggerTitleGeneration(sessionID string, content string) {
 	}()
 }
 
-func (a *agent) processGeneration(ctx context.Context, sessionID, content string, attachmentParts []message.ContentPart) AgentEvent {
+func (a *agent) processGeneration(ctx context.Context, sessionID, content string, watchMode bool, attachmentParts []message.ContentPart) AgentEvent {
 	currentSession, sessionMessages, err := a.prepareMessageHistory(ctx, sessionID)
 	if err != nil {
 		return a.err(err)
@@ -320,6 +320,10 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 				return a.err(ErrRequestCancelled)
 			}
 			return a.err(fmt.Errorf("failed to process events: %w", err))
+		}
+
+		if textContent := agentMessage.Content(); watchMode && textContent != nil {
+			fmt.Printf("Assistant: %s\n", textContent)
 		}
 		slog.Info("Result", "message", agentMessage.FinishReason(), "toolResults", toolResults)
 		if (agentMessage.FinishReason() == message.FinishReasonToolUse) && toolResults != nil {

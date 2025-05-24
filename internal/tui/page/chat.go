@@ -194,7 +194,7 @@ func (p *chatPage) sendMessage(text string, attachments []message.Attachment) te
 		cmds = append(cmds, util.CmdHandler(state.SessionSelectedMsg(&newSession)))
 	}
 
-	_, err := p.app.PrimaryAgent.Run(context.Background(), p.app.CurrentSession.ID, text, attachments...)
+	_, err := p.app.PrimaryAgent.Run(context.Background(), p.app.CurrentSession.ID, text, false, attachments...)
 	if err != nil {
 		status.Error(err.Error())
 		return nil

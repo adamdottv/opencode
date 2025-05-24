@@ -83,6 +83,7 @@ You can configure OpenCode using environment variables:
 | `AZURE_OPENAI_ENDPOINT`    | For Azure OpenAI models                                |
 | `AZURE_OPENAI_API_KEY`     | For Azure OpenAI models (optional when using Entra ID) |
 | `AZURE_OPENAI_API_VERSION` | For Azure OpenAI models                                |
+
 ### Configuration File Structure
 
 ```json
@@ -205,7 +206,7 @@ To use bedrock models with OpenCode you need three things.
 
 1. Valid AWS credentials (the env vars: `AWS_SECRET_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`)
 2. Access to the corresponding model in AWS Bedrock in your region.
-    a. You can request access in the AWS console on the Bedrock -> "Model access" page.
+   a. You can request access in the AWS console on the Bedrock -> "Model access" page.
 3. A correct configuration file. You don't need the `providers` key. Instead you have to prefix your models per agent with `bedrock.` and then a valid model. For now only Claude 3.7 is supported.
 
 ```json
@@ -226,10 +227,10 @@ To use bedrock models with OpenCode you need three things.
       "maxTokens": 80,
       "reasoningEffort": ""
     }
-  },
+  }
 }
 ```
- 
+
 ## Interactive Mode Usage
 
 ```bash
@@ -269,6 +270,31 @@ opencode -p "Explain the use of context in Go" --excludedTools=bash,edit
 
 In this mode, OpenCode will process your prompt, print the result to standard output, and then exit. All permissions are auto-approved for the session.
 
+### Watch Mode
+
+You can send messges to opencode from you favourite editor when you run opencode in watch mode. Write a comment ending with 'opencode!' to send messages to opencode.
+
+```bash
+# Run a single prompt and print the AI's response to the terminal
+opencode --watch
+```
+
+Example:
+
+```go
+// write a function to add 3 numbers opencode!
+func Add(a, b int) int {
+	return a + b
+}
+
+func main() {
+	fmt.Println("test")
+	fmt.Println("hello")
+}
+```
+
+In this mode, OpenCode will process your prompt, print the result to standard output, and then exit. All permissions are auto-approved for the session.
+
 ### Tool Restrictions
 
 You can control which tools the AI assistant has access to in non-interactive mode:
@@ -282,26 +308,26 @@ These flags are mutually exclusive - you can use either `--allowedTools` or `--e
 
 OpenCode supports the following output formats in non-interactive mode:
 
-| Format | Description                            |
-| ------ | -------------------------------------- |
-| `text` | Plain text output (default)            |
-| `json` | Output wrapped in a JSON object        |
+| Format | Description                     |
+| ------ | ------------------------------- |
+| `text` | Plain text output (default)     |
+| `json` | Output wrapped in a JSON object |
 
 The output format is implemented as a strongly-typed `OutputFormat` in the codebase, ensuring type safety and validation when processing outputs.
 
 ## Command-line Flags
 
-| Flag              | Short | Description                                                |
-| ----------------- | ----- | ---------------------------------------------------------- |
-| `--help`          | `-h`  | Display help information                                   |
-| `--debug`         | `-d`  | Enable debug mode                                          |
-| `--cwd`           | `-c`  | Set current working directory                              |
-| `--prompt`        | `-p`  | Run a single prompt in non-interactive mode                |
-| `--output-format` | `-f`  | Output format for non-interactive mode (text, json)        |
-| `--quiet`         | `-q`  | Hide spinner in non-interactive mode                       |
-| `--verbose`       |       | Display logs to stderr in non-interactive mode             |
-| `--allowedTools`  |       | Restrict the agent to only use specified tools             |
-| `--excludedTools` |       | Prevent the agent from using specified tools               |
+| Flag              | Short | Description                                         |
+| ----------------- | ----- | --------------------------------------------------- |
+| `--help`          | `-h`  | Display help information                            |
+| `--debug`         | `-d`  | Enable debug mode                                   |
+| `--cwd`           | `-c`  | Set current working directory                       |
+| `--prompt`        | `-p`  | Run a single prompt in non-interactive mode         |
+| `--output-format` | `-f`  | Output format for non-interactive mode (text, json) |
+| `--quiet`         | `-q`  | Hide spinner in non-interactive mode                |
+| `--verbose`       |       | Display logs to stderr in non-interactive mode      |
+| `--allowedTools`  |       | Restrict the agent to only use specified tools      |
+| `--excludedTools` |       | Prevent the agent from using specified tools        |
 
 ## Keyboard Shortcuts
 
@@ -470,6 +496,7 @@ You don't need to define all colors. Any undefined colors will fall back to the 
 ### Shell Configuration
 
 OpenCode allows you to configure the shell used by the `bash` tool. By default, it uses:
+
 1. The shell specified in the config file (if provided)
 2. The shell from the `$SHELL` environment variable (if available)
 3. Falls back to `/bin/bash` if neither of the above is available
@@ -564,6 +591,7 @@ RUN grep -R "$SEARCH_PATTERN" $DIRECTORY
 ```
 
 When you run a command with arguments, OpenCode will prompt you to enter values for each unique placeholder. Named arguments provide several benefits:
+
 - Clear identification of what each argument represents
 - Ability to use the same argument multiple times
 - Better organization for commands with multiple inputs
