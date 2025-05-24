@@ -125,3 +125,4 @@ func (s *Spinner) Stop() {
 	s.cancel()
 	<-s.done
 }
+
