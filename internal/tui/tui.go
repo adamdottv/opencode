@@ -317,6 +317,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reinitialize the model dialog
 		a.modelDialog.Init()
 
+		// Initialize project
+		a.Update(dialog.CloseInitDialogMsg{Initialize: true})
+
 		// Reinitialize the primary agent
 		a.app.InitializePrimaryAgent()
 
@@ -627,7 +630,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
 			a.app.SetFilepickerOpen(a.showFilepicker)
-			
+
 			// Close other dialogs if opening filepicker
 			if a.showFilepicker {
 				a.showToolsDialog = false
