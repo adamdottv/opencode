@@ -54,3 +54,10 @@ type Session struct {
 	UpdatedAt        string         `json:"updated_at"`
 	CreatedAt        string         `json:"created_at"`
 }
+
+type UserInputHistory struct {
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	InputText string `json:"input_text"`
+	CreatedAt string `json:"created_at"`
+}

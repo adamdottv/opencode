@@ -10,19 +10,23 @@ import (
 )
 
 type Querier interface {
+	CountUserInputHistoryBySession(ctx context.Context, sessionID string) (int64, error)
 	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
 	CreateLog(ctx context.Context, arg CreateLogParams) (Log, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	CreateUserInputHistory(ctx context.Context, arg CreateUserInputHistoryParams) (UserInputHistory, error)
 	DeleteFile(ctx context.Context, id string) error
 	DeleteMessage(ctx context.Context, id string) error
 	DeleteSession(ctx context.Context, id string) error
 	DeleteSessionFiles(ctx context.Context, sessionID string) error
 	DeleteSessionMessages(ctx context.Context, sessionID string) error
+	DeleteSessionUserInputHistory(ctx context.Context, sessionID string) error
 	GetFile(ctx context.Context, id string) (File, error)
 	GetFileByPathAndSession(ctx context.Context, arg GetFileByPathAndSessionParams) (File, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetSessionByID(ctx context.Context, id string) (Session, error)
+	GetUserInputHistoryBySession(ctx context.Context, arg GetUserInputHistoryBySessionParams) ([]UserInputHistory, error)
 	ListAllLogs(ctx context.Context, limit int64) ([]Log, error)
 	ListFilesByPath(ctx context.Context, path string) ([]File, error)
 	ListFilesBySession(ctx context.Context, sessionID string) ([]File, error)

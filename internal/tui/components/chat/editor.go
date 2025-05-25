@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/history"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/status"
 	"github.com/sst/opencode/internal/tui/components/dialog"
@@ -25,15 +27,14 @@ import (
 )
 
 type editorCmp struct {
-	width          int
-	height         int
-	app            *app.App
-	textarea       textarea.Model
-	attachments    []message.Attachment
-	deleteMode     bool
-	history        []string
-	historyIndex   int
-	currentMessage string
+	width           int
+	height          int
+	app             *app.App
+	textarea        textarea.Model
+	attachments     []message.Attachment
+	deleteMode      bool
+	historyNav      history.InputHistoryNavigator
+	currentSessionID string
 }
 
 type EditorKeyMaps struct {
@@ -138,6 +139,13 @@ func (m *editorCmp) openEditor(value string) tea.Cmd {
 	})
 }
 
+func (m *editorCmp) ensureNavigator() {
+	if m.historyNav == nil || m.currentSessionID != m.app.CurrentSession.ID {
+		m.historyNav = history.CreateInputHistoryNavigator(m.app.CurrentSession.ID)
+		m.currentSessionID = m.app.CurrentSession.ID
+	}
+}
+
 func (m *editorCmp) Init() tea.Cmd {
 	return textarea.Blink
 }
@@ -152,13 +160,13 @@ func (m *editorCmp) send() tea.Cmd {
 	m.textarea.Reset()
 	attachments := m.attachments
 
-	// Save to history if not empty and not a duplicate of the last entry
 	if value != "" {
-		if len(m.history) == 0 || m.history[len(m.history)-1] != value {
-			m.history = append(m.history, value)
+		m.ensureNavigator()
+		ctx := context.Background()
+		err := m.historyNav.AddMessage(ctx, value)
+		if err != nil {
+			slog.Error("Failed to save input to history", "error", err)
 		}
-		m.historyIndex = len(m.history)
-		m.currentMessage = ""
 	}
 
 	m.attachments = nil
@@ -246,45 +254,31 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Handle history navigation with up/down arrow keys
-		// Only handle history navigation if the filepicker is not open and completion dialog is not open
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryUp) && !m.app.IsFilepickerOpen() && !m.app.IsCompletionDialogOpen() {
-			// Get the current line number
 			currentLine := m.textarea.Line()
 			
-			// Only navigate history if we're at the first line
-			if currentLine == 0 && len(m.history) > 0 {
-				// Save current message if we're just starting to navigate
-				if m.historyIndex == len(m.history) {
-					m.currentMessage = m.textarea.Value()
+			if currentLine == 0 {
+				m.ensureNavigator()
+				if m.historyNav.HasHistory() {
+					m.historyNav.SetCurrentMessage(m.textarea.Value())
+					if content, ok := m.historyNav.NavigateUp(); ok {
+						m.textarea.SetValue(content)
+					}
+					return m, nil
 				}
-				
-				// Go to previous message in history
-				if m.historyIndex > 0 {
-					m.historyIndex--
-					m.textarea.SetValue(m.history[m.historyIndex])
-				}
-				return m, nil
 			}
 		}
 		
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryDown) && !m.app.IsFilepickerOpen() && !m.app.IsCompletionDialogOpen() {
-			// Get the current line number and total lines
 			currentLine := m.textarea.Line()
 			value := m.textarea.Value()
 			lines := strings.Split(value, "\n")
 			totalLines := len(lines)
 			
-			// Only navigate history if we're at the last line
 			if currentLine == totalLines-1 {
-				if m.historyIndex < len(m.history)-1 {
-					// Go to next message in history
-					m.historyIndex++
-					m.textarea.SetValue(m.history[m.historyIndex])
-				} else if m.historyIndex == len(m.history)-1 {
-					// Return to the current message being composed
-					m.historyIndex = len(m.history)
-					m.textarea.SetValue(m.currentMessage)
+				m.ensureNavigator()
+				if content, ok := m.historyNav.NavigateDown(); ok {
+					m.textarea.SetValue(content)
 				}
 				return m, nil
 			}
@@ -403,10 +397,7 @@ func CreateTextArea(existing *textarea.Model) textarea.Model {
 func NewEditorCmp(app *app.App) tea.Model {
 	ta := CreateTextArea(nil)
 	return &editorCmp{
-		app:          app,
-		textarea:     ta,
-		history:      []string{},
-		historyIndex: 0,
-		currentMessage: "",
+		app:      app,
+		textarea: ta,
 	}
 }

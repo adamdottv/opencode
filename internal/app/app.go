@@ -67,6 +67,11 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 		slog.Error("Failed to initialize history service", "error", err)
 		return nil, err
 	}
+	err = history.InitInputHistoryService(conn, history.DefaultInputHistoryConfig())
+	if err != nil {
+		slog.Error("Failed to initialize input history service", "error", err)
+		return nil, err
+	}
 	err = permission.InitService()
 	if err != nil {
 		slog.Error("Failed to initialize permission service", "error", err)
