@@ -317,24 +317,13 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reinitialize the model dialog
 		a.modelDialog.Init()
 
-		// Initialize project
-		a.Update(dialog.CloseInitDialogMsg{Initialize: true})
-
 		// Reinitialize the primary agent
 		a.app.InitializePrimaryAgent()
 
-		// Show init dialog if project is not initialized
-		shouldShowInit, err := config.ShouldShowInitDialog()
-		if err != nil {
-			status.Error("Failed to check init status: " + err.Error())
-			return a, nil
-		}
-		if shouldShowInit {
-			a.showInitDialog = true
-			return a, nil
-		}
+		// Initialize project
+		_, cmd = a.Update(dialog.CloseInitDialogMsg{Initialize: true})
 
-		return a, nil
+		return a, cmd
 
 	case dialog.CloseCommandDialogMsg:
 		a.showCommandDialog = false
