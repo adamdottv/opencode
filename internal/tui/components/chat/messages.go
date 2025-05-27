@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -12,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/pubsub"
 	"github.com/sst/opencode/internal/session"
@@ -370,6 +372,13 @@ func (m *messagesCmp) help() string {
 
 	text := ""
 
+	cfg := config.Get()
+	if cfg == nil {
+		return "failed to get config"
+	}
+
+	toggleTool := cfg.GetChatKeyMap().ToggleTools
+
 	if m.app.PrimaryAgent.IsBusy() {
 		text += lipgloss.JoinHorizontal(
 			lipgloss.Left,
@@ -388,7 +397,7 @@ func (m *messagesCmp) help() string {
 			baseStyle.Foreground(t.TextMuted()).Bold(true).Render(" for newline,"),
 			baseStyle.Foreground(t.Text()).Bold(true).Render(" ↑↓"),
 			baseStyle.Foreground(t.TextMuted()).Bold(true).Render(" for history,"),
-			baseStyle.Foreground(t.Text()).Bold(true).Render(" ctrl+h"),
+			baseStyle.Foreground(t.Text()).Bold(true).Render(fmt.Sprintf(" %s", keyBindingString(toggleTool))),
 			baseStyle.Foreground(t.TextMuted()).Bold(true).Render(" to toggle tool messages"),
 		)
 	}
@@ -482,4 +491,8 @@ func NewMessagesCmp(app *app.App) tea.Model {
 		attachments:      attachmets,
 		showToolMessages: true,
 	}
+}
+
+func keyBindingString(binding key.Binding) string {
+	return strings.Join(binding.Keys(), ", ")
 }
