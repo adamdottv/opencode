@@ -141,7 +141,10 @@ You can configure OpenCode using environment variables:
     "args": ["-l"]
   },
   "debug": false,
-  "debugLSP": false
+  "debugLSP": false,
+  "ignore": {
+    "folders": ["path/to/ignored-folder"]
+  }
 }
 ```
 
@@ -229,7 +232,7 @@ To use bedrock models with OpenCode you need three things.
   },
 }
 ```
- 
+
 ## Interactive Mode Usage
 
 ```bash
