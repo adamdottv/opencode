@@ -1,10 +1,16 @@
 package dialog
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sst/opencode/internal/lsp"
+	"github.com/sst/opencode/internal/lsp/protocol"
 	"github.com/sst/opencode/internal/status"
 	utilComponents "github.com/sst/opencode/internal/tui/components/util"
 	"github.com/sst/opencode/internal/tui/layout"
@@ -83,12 +89,13 @@ type CompletionDialog interface {
 }
 
 type completionDialogCmp struct {
-	query                string
-	completionProvider   CompletionProvider
-	width                int
-	height               int
-	pseudoSearchTextArea textarea.Model
-	listView             utilComponents.SimpleList[CompletionItemI]
+	query                      string
+	completionProviders        []CompletionProvider
+	selectedCompletionProvider int
+	width                      int
+	height                     int
+	pseudoSearchTextArea       textarea.Model
+	listView                   utilComponents.SimpleList[CompletionItemI]
 }
 
 type completionDialogKeyMap struct {
@@ -126,9 +133,17 @@ func (c *completionDialogCmp) complete(item CompletionItemI) tea.Cmd {
 }
 
 func (c *completionDialogCmp) close() tea.Cmd {
-	c.listView.SetItems([]CompletionItemI{})
 	c.pseudoSearchTextArea.Reset()
 	c.pseudoSearchTextArea.Blur()
+	c.selectedCompletionProvider = -1
+
+	items := make([]CompletionItemI, 0)
+
+	for _, provider := range c.completionProviders {
+		items = append(items, provider.GetEntry())
+	}
+
+	c.listView.SetItems(items)
 
 	return util.CmdHandler(CompletionDialogCloseMsg{})
 }
@@ -149,16 +164,37 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				query = c.pseudoSearchTextArea.Value()
 				if query != "" {
 					query = query[1:]
-				}
 
-				if query != c.query {
-					items, err := c.completionProvider.GetChildEntries(query)
-					if err != nil {
-						status.Error(err.Error())
+					if query != c.query {
+						completionsItems := make([]CompletionItemI, 0)
+						if query != "" {
+							for _, provider := range c.completionProviders {
+								items, err := provider.GetChildEntries(query)
+								if err != nil {
+									status.Error(err.Error())
+								}
+								completionsItems = append(completionsItems, items...)
+							}
+						} else {
+							if c.selectedCompletionProvider == -1 {
+								for _, provider := range c.completionProviders {
+									items := provider.GetEntry()
+									completionsItems = append(completionsItems, items)
+								}
+							} else {
+								provider := c.completionProviders[c.selectedCompletionProvider]
+								items, err := provider.GetChildEntries(query)
+								if err != nil {
+									status.Error(err.Error())
+								}
+
+								completionsItems = append(completionsItems, items...)
+							}
+						}
+						c.listView.SetItems(completionsItems)
+						c.query = query
 					}
 
-					c.listView.SetItems(items)
-					c.query = query
 				}
 
 				u, cmd := c.listView.Update(msg)
@@ -174,7 +210,22 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return c, nil
 				}
 
-				cmd := c.complete(item)
+				var cmd tea.Cmd = nil
+
+				if c.selectedCompletionProvider == -1 {
+					c.selectedCompletionProvider = i
+
+					provider := c.completionProviders[i]
+
+					items, err := provider.GetChildEntries("")
+					if err != nil {
+						status.Error(err.Error())
+					}
+
+					c.listView.SetItems(items)
+				} else {
+					cmd = c.complete(item)
+				}
 
 				return c, cmd
 			case key.Matches(msg, completionDialogKeys.Cancel):
@@ -186,12 +237,6 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return c, tea.Batch(cmds...)
 		} else {
-			items, err := c.completionProvider.GetChildEntries("")
-			if err != nil {
-				status.Error(err.Error())
-			}
-
-			c.listView.SetItems(items)
 			c.pseudoSearchTextArea.SetValue(msg.String())
 			return c, c.pseudoSearchTextArea.Focus()
 		}
@@ -239,12 +284,13 @@ func (c *completionDialogCmp) BindingKeys() []key.Binding {
 	return layout.KeyMapToSlice(completionDialogKeys)
 }
 
-func NewCompletionDialogCmp(completionProvider CompletionProvider) CompletionDialog {
+func NewCompletionDialogCmp(completionProvider []CompletionProvider) CompletionDialog {
 	ti := textarea.New()
 
-	items, err := completionProvider.GetChildEntries("")
-	if err != nil {
-		status.Error(err.Error())
+	items := make([]CompletionItemI, 0)
+
+	for _, provider := range completionProvider {
+		items = append(items, provider.GetEntry())
 	}
 
 	li := utilComponents.NewSimpleList(
@@ -255,9 +301,126 @@ func NewCompletionDialogCmp(completionProvider CompletionProvider) CompletionDia
 	)
 
 	return &completionDialogCmp{
-		query:                "",
-		completionProvider:   completionProvider,
-		pseudoSearchTextArea: ti,
-		listView:             li,
+		query:                      "",
+		completionProviders:        completionProvider,
+		selectedCompletionProvider: -1,
+		pseudoSearchTextArea:       ti,
+		listView:                   li,
 	}
+}
+
+func getDocumentSymbols(ctx context.Context, filePath string, lsps map[string]*lsp.Client) string {
+	var results []string
+
+	for lspName, client := range lsps {
+		// Create document symbol params
+		uri := fmt.Sprintf("file://%s", filePath)
+		symbolParams := protocol.DocumentSymbolParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: protocol.DocumentUri(uri),
+			},
+		}
+
+		// Get document symbols
+		symbolResult, err := client.DocumentSymbol(ctx, symbolParams)
+		if err != nil {
+			results = append(results, fmt.Sprintf("Error from %s: %s", lspName, err))
+			continue
+		}
+
+		// Process the symbol result
+		symbols := processDocumentSymbolResult(symbolResult)
+		if len(symbols) == 0 {
+			results = append(results, fmt.Sprintf("No symbols found by %s", lspName))
+			continue
+		}
+
+		// Format the symbols
+		results = append(results, fmt.Sprintf("Symbols found by %s:", lspName))
+		for _, symbol := range symbols {
+			results = append(results, formatSymbol(symbol, 1))
+		}
+	}
+
+	if len(results) == 0 {
+		return "No symbols found in the specified file."
+	}
+
+	return strings.Join(results, "\n")
+}
+
+func processDocumentSymbolResult(result protocol.Or_Result_textDocument_documentSymbol) []SymbolInfo {
+	var symbols []SymbolInfo
+
+	switch v := result.Value.(type) {
+	case []protocol.SymbolInformation:
+		for _, si := range v {
+			symbols = append(symbols, SymbolInfo{
+				Name:     si.Name,
+				Kind:     symbolKindToString(si.Kind),
+				Location: locationToString(si.Location),
+				Children: nil,
+			})
+		}
+	case []protocol.DocumentSymbol:
+		for _, ds := range v {
+			symbols = append(symbols, documentSymbolToSymbolInfo(ds))
+		}
+	}
+
+	return symbols
+}
+
+// SymbolInfo represents a symbol in a document
+type SymbolInfo struct {
+	Name     string
+	Kind     string
+	Location string
+	Children []SymbolInfo
+}
+
+func documentSymbolToSymbolInfo(symbol protocol.DocumentSymbol) SymbolInfo {
+	info := SymbolInfo{
+		Name: symbol.Name,
+		Kind: symbolKindToString(symbol.Kind),
+		Location: fmt.Sprintf("Line %d-%d",
+			symbol.Range.Start.Line+1,
+			symbol.Range.End.Line+1),
+		Children: []SymbolInfo{},
+	}
+
+	for _, child := range symbol.Children {
+		info.Children = append(info.Children, documentSymbolToSymbolInfo(child))
+	}
+
+	return info
+}
+
+func locationToString(location protocol.Location) string {
+	return fmt.Sprintf("Line %d-%d",
+		location.Range.Start.Line+1,
+		location.Range.End.Line+1)
+}
+
+func symbolKindToString(kind protocol.SymbolKind) string {
+	if kindStr, ok := protocol.TableKindMap[kind]; ok {
+		return kindStr
+	}
+	return "Unknown"
+}
+
+func formatSymbol(symbol SymbolInfo, level int) string {
+	indent := strings.Repeat("  ", level)
+	result := fmt.Sprintf("%s- %s (%s) %s", indent, symbol.Name, symbol.Kind, symbol.Location)
+
+	var childResults []string
+	for _, child := range symbol.Children {
+		childResults = append(childResults, formatSymbol(child, level+1))
+	}
+
+	if len(childResults) > 0 {
+		return result + "\n" + strings.Join(childResults, "\n")
+	}
+
+	return result
 }
