@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"sync"
 	"time"
@@ -13,37 +12,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/spf13/cobra"
-	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/config"
-	"github.com/sst/opencode/internal/db"
-	"github.com/sst/opencode/internal/format"
-	"github.com/sst/opencode/internal/llm/agent"
 	"github.com/sst/opencode/internal/logging"
-	"github.com/sst/opencode/internal/lsp/discovery"
 	"github.com/sst/opencode/internal/pubsub"
 	"github.com/sst/opencode/internal/tui"
+	"github.com/sst/opencode/internal/tui/app"
 	"github.com/sst/opencode/internal/version"
 )
-
-type SessionIDHandler struct {
-	slog.Handler
-	app *app.App
-}
-
-func (h *SessionIDHandler) Handle(ctx context.Context, r slog.Record) error {
-	if h.app != nil {
-		sessionID := h.app.CurrentSession.ID
-		if sessionID != "" {
-			r.AddAttrs(slog.String("session_id", sessionID))
-		}
-	}
-	return h.Handler.Handle(ctx, r)
-}
-
-func (h *SessionIDHandler) WithApp(app *app.App) *SessionIDHandler {
-	h.app = app
-	return h
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "OpenCode",
@@ -63,10 +38,12 @@ to assist developers in writing, debugging, and understanding code directly from
 		}
 
 		// Setup logging
-		lvl := new(slog.LevelVar)
-		textHandler := slog.NewTextHandler(logging.NewSlogWriter(), &slog.HandlerOptions{Level: lvl})
-		sessionAwareHandler := &SessionIDHandler{Handler: textHandler}
-		logger := slog.New(sessionAwareHandler)
+		file, err := os.OpenFile("app.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+		logger := slog.New(slog.NewTextHandler(file, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		slog.SetDefault(logger)
 
 		// Load the config
@@ -85,48 +62,7 @@ to assist developers in writing, debugging, and understanding code directly from
 			}
 			cwd = c
 		}
-		_, err := config.Load(cwd, debug, lvl)
-		if err != nil {
-			return err
-		}
-
-		// Check if we're in non-interactive mode
-		prompt, _ := cmd.Flags().GetString("prompt")
-		
-		// Check for piped input if no prompt was provided via flag
-		if prompt == "" {
-			pipedInput, hasPipedInput := checkStdinPipe()
-			if hasPipedInput {
-				prompt = pipedInput
-			}
-		}
-		
-		// If we have a prompt (either from flag or piped input), run in non-interactive mode
-		if prompt != "" {
-			outputFormatStr, _ := cmd.Flags().GetString("output-format")
-			outputFormat := format.OutputFormat(outputFormatStr)
-			if !outputFormat.IsValid() {
-				return fmt.Errorf("invalid output format: %s", outputFormatStr)
-			}
-
-			quiet, _ := cmd.Flags().GetBool("quiet")
-			verbose, _ := cmd.Flags().GetBool("verbose")
-
-			// Get tool restriction flags
-			allowedTools, _ := cmd.Flags().GetStringSlice("allowedTools")
-			excludedTools, _ := cmd.Flags().GetStringSlice("excludedTools")
-
-			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, verbose, allowedTools, excludedTools)
-		}
-
-		// Run LSP auto-discovery
-		if err := discovery.IntegrateLSPServers(cwd); err != nil {
-			slog.Warn("Failed to auto-discover LSP servers", "error", err)
-			// Continue anyway, this is not a fatal error
-		}
-
-		// Connect DB, this will also run migrations
-		conn, err := db.Connect()
+		_, err = config.Load(cwd, debug)
 		if err != nil {
 			return err
 		}
@@ -135,12 +71,11 @@ to assist developers in writing, debugging, and understanding code directly from
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		app, err := app.New(ctx, conn)
+		app, err := app.New(ctx)
 		if err != nil {
 			slog.Error("Failed to create app", "error", err)
 			return err
 		}
-		sessionAwareHandler.WithApp(app)
 
 		// Set up the TUI
 		zone.NewGlobal()
@@ -149,8 +84,17 @@ to assist developers in writing, debugging, and understanding code directly from
 			tea.WithAltScreen(),
 		)
 
-		// Initialize MCP tools in the background
-		initMCPTools(ctx, app)
+		evts, err := app.Events.Event(ctx)
+		if err != nil {
+			slog.Error("Failed to subscribe to events", "error", err)
+			return err
+		}
+
+		go func() {
+			for item := range evts {
+				program.Send(item)
+			}
+		}()
 
 		// Setup the subscriptions, this will send services events to the TUI
 		ch, cancelSubs := setupSubscriptions(app, ctx)
@@ -222,20 +166,6 @@ func attemptTUIRecovery(program *tea.Program) {
 	program.Quit()
 }
 
-func initMCPTools(ctx context.Context, app *app.App) {
-	go func() {
-		defer logging.RecoverPanic("MCP-goroutine", nil)
-
-		// Create a context with timeout for the initial MCP tools fetch
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-
-		// Set this up once with proper error handling
-		agent.GetMcpTools(ctxWithTimeout, app.Permissions)
-		slog.Info("MCP message handling goroutine exiting")
-	}()
-}
-
 func setupSubscriber[T any](
 	ctx context.Context,
 	wg *sync.WaitGroup,
@@ -286,10 +216,6 @@ func setupSubscriptions(app *app.App, parentCtx context.Context) (chan tea.Msg, 
 	wg := sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(parentCtx) // Inherit from parent context
 
-	setupSubscriber(ctx, &wg, "logging", app.Logs.Subscribe, ch)
-	setupSubscriber(ctx, &wg, "sessions", app.Sessions.Subscribe, ch)
-	setupSubscriber(ctx, &wg, "messages", app.Messages.Subscribe, ch)
-	setupSubscriber(ctx, &wg, "permissions", app.Permissions.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "status", app.Status.Subscribe, ch)
 
 	cleanupFunc := func() {
@@ -320,25 +246,6 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-// checkStdinPipe checks if there's data being piped into stdin
-func checkStdinPipe() (string, bool) {
-	// Check if stdin is not a terminal (i.e., it's being piped)
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		// Read all data from stdin
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return "", false
-		}
-		
-		// If we got data, return it
-		if len(data) > 0 {
-			return string(data), true
-		}
-	}
-	return "", false
 }
 
 func init() {

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -11,27 +10,24 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/config"
-	"github.com/sst/opencode/internal/llm/agent"
-	"github.com/sst/opencode/internal/logging"
+	"github.com/sst/opencode/internal/tui/app"
+
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/permission"
 	"github.com/sst/opencode/internal/pubsub"
-	"github.com/sst/opencode/internal/session"
 	"github.com/sst/opencode/internal/status"
 	"github.com/sst/opencode/internal/tui/components/chat"
 	"github.com/sst/opencode/internal/tui/components/core"
 	"github.com/sst/opencode/internal/tui/components/dialog"
-	"github.com/sst/opencode/internal/tui/components/logs"
 	"github.com/sst/opencode/internal/tui/layout"
 	"github.com/sst/opencode/internal/tui/page"
 	"github.com/sst/opencode/internal/tui/state"
 	"github.com/sst/opencode/internal/tui/util"
+	"github.com/sst/opencode/pkg/client"
 )
 
 type keyMap struct {
-	Logs          key.Binding
 	Quit          key.Binding
 	Help          key.Binding
 	SwitchSession key.Binding
@@ -47,11 +43,6 @@ const (
 )
 
 var keys = keyMap{
-	Logs: key.NewBinding(
-		key.WithKeys("ctrl+l"),
-		key.WithHelp("ctrl+l", "logs"),
-	),
-
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),
 		key.WithHelp("ctrl+c", "quit"),
@@ -83,7 +74,7 @@ var keys = keyMap{
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("ctrl+t", "switch theme"),
 	),
-	
+
 	Tools: key.NewBinding(
 		key.WithKeys("f9"),
 		key.WithHelp("f9", "show available tools"),
@@ -98,11 +89,6 @@ var helpEsc = key.NewBinding(
 var returnKey = key.NewBinding(
 	key.WithKeys("esc"),
 	key.WithHelp("esc", "close"),
-)
-
-var logsKeyReturnKey = key.NewBinding(
-	key.WithKeys("esc", "backspace", quitKey),
-	key.WithHelp("esc/q", "go back"),
 )
 
 type appModel struct {
@@ -144,7 +130,7 @@ type appModel struct {
 
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
-	
+
 	showToolsDialog bool
 	toolsDialog     dialog.ToolsDialog
 }
@@ -191,7 +177,7 @@ func (a appModel) Init() tea.Cmd {
 func (a appModel) updateAllPages(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
-	for id, _ := range a.pages {
+	for id := range a.pages {
 		a.pages[id], cmd = a.pages[id].Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -206,6 +192,26 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateAllPages(msg)
 	case spinner.TickMsg:
 		return a.updateAllPages(msg)
+
+	case client.EventSessionUpdated:
+		if msg.Properties.Info.Id == a.app.Session.Id {
+			a.app.Session = &msg.Properties.Info
+			return a.updateAllPages(state.StateUpdatedMsg{State: nil})
+		}
+
+	case client.EventMessageUpdated:
+		if msg.Properties.Info.Metadata.SessionID == a.app.Session.Id {
+			for i, m := range a.app.Messages {
+				if m.Id == msg.Properties.Info.Id {
+					a.app.Messages[i] = msg.Properties.Info
+					slog.Debug("Updated message", "message", msg.Properties.Info)
+					return a.updateAllPages(state.StateUpdatedMsg{State: nil})
+				}
+			}
+			a.app.Messages = append(a.app.Messages, msg.Properties.Info)
+			slog.Debug("Appended message", "message", msg.Properties.Info)
+			return a.updateAllPages(state.StateUpdatedMsg{State: nil})
+		}
 
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
@@ -250,36 +256,27 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pubsub.Event[permission.PermissionRequest]:
 		a.showPermissions = true
 		return a, a.permissions.SetPermissions(msg.Payload)
+
 	case dialog.PermissionResponseMsg:
-		var cmd tea.Cmd
-		switch msg.Action {
-		case dialog.PermissionAllow:
-			a.app.Permissions.Grant(context.Background(), msg.Permission)
-		case dialog.PermissionAllowForSession:
-			a.app.Permissions.GrantPersistant(context.Background(), msg.Permission)
-		case dialog.PermissionDeny:
-			a.app.Permissions.Deny(context.Background(), msg.Permission)
-		}
+		// TODO: Permissions service not implemented in API yet
+		// var cmd tea.Cmd
+		// switch msg.Action {
+		// case dialog.PermissionAllow:
+		// 	a.app.Permissions.Grant(context.Background(), msg.Permission)
+		// case dialog.PermissionAllowForSession:
+		// 	a.app.Permissions.GrantPersistant(context.Background(), msg.Permission)
+		// case dialog.PermissionDeny:
+		// 	a.app.Permissions.Deny(context.Background(), msg.Permission)
+		// }
 		a.showPermissions = false
-		return a, cmd
+		return a, nil
 
 	case page.PageChangeMsg:
 		return a, a.moveToPage(msg.ID)
 
-	case logs.LogsLoadedMsg:
-		a.pages[page.LogsPage], cmd = a.pages[page.LogsPage].Update(msg)
-		cmds = append(cmds, cmd)
-
 	case state.SessionSelectedMsg:
-		a.app.CurrentSession = msg
+		a.app.CurrentSessionOLD = msg
 		return a.updateAllPages(msg)
-
-	case pubsub.Event[session.Session]:
-		if msg.Type == session.EventSessionUpdated {
-			if a.app.CurrentSession.ID == msg.Payload.ID {
-				a.app.CurrentSession = &msg.Payload
-			}
-		}
 
 	case dialog.CloseQuitMsg:
 		a.showQuit = false
@@ -299,11 +296,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
 		return a, nil
-		
+
 	case dialog.CloseToolsDialogMsg:
 		a.showToolsDialog = false
 		return a, nil
-		
+
 	case dialog.ShowToolsDialogMsg:
 		a.showToolsDialog = msg.Show
 		return a, nil
@@ -321,13 +318,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.ModelSelectedMsg:
 		a.showModelDialog = false
 
-		model, err := a.app.PrimaryAgent.Update(config.AgentPrimary, msg.Model.ID)
-		if err != nil {
-			status.Error(err.Error())
-			return a, nil
-		}
+		// TODO: Agent model update not implemented in API yet
+		// model, err := a.app.PrimaryAgent.Update(config.AgentPrimary, msg.Model.ID)
+		// if err != nil {
+		// 	status.Error(err.Error())
+		// 	return a, nil
+		// }
 
-		status.Info(fmt.Sprintf("Model changed to %s", model.Name))
+		// status.Info(fmt.Sprintf("Model changed to %s", model.Name))
+		status.Info("Model selection not implemented in API yet")
 		return a, nil
 
 	case dialog.ShowInitDialogMsg:
@@ -436,9 +435,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showThemeDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				// Load sessions and show the dialog
-				sessions, err := a.app.Sessions.List(context.Background())
+				sessions, err := a.app.ListSessions(context.Background())
 				if err != nil {
 					status.Error(err.Error())
 					return a, nil
@@ -457,7 +456,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showModelDialog = false
-				
+
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -478,7 +477,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showThemeDialog = false
 				a.showFilepicker = false
-				
+
 				a.showModelDialog = true
 				return a, nil
 			}
@@ -489,17 +488,17 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
 		case key.Matches(msg, keys.Tools):
 			// Check if any other dialog is open
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
-			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
-			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
-			   !a.showMultiArgumentsDialog {
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions &&
+				!a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog &&
+				!a.showFilepicker && !a.showModelDialog && !a.showInitDialog &&
+				!a.showMultiArgumentsDialog {
 				// Toggle tools dialog
 				a.showToolsDialog = !a.showToolsDialog
 				if a.showToolsDialog {
@@ -511,11 +510,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		case key.Matches(msg, returnKey) || key.Matches(msg):
-			if msg.String() == quitKey {
-				if a.currentPage == page.LogsPage {
-					return a, a.moveToPage(page.ChatPage)
-				}
-			} else if !a.filepicker.IsCWDFocused() {
+			if !a.filepicker.IsCWDFocused() {
 				if a.showToolsDialog {
 					a.showToolsDialog = false
 					return a, nil
@@ -543,26 +538,20 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.app.SetFilepickerOpen(a.showFilepicker)
 					return a, nil
 				}
-				if a.currentPage == page.LogsPage {
-					// Always allow returning from logs page, even when agent is busy
-					return a, a.moveToPageUnconditional(page.ChatPage)
-				}
 			}
-		case key.Matches(msg, keys.Logs):
-			return a, a.moveToPage(page.LogsPage)
 		case key.Matches(msg, keys.Help):
 			if a.showQuit {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
-			
+
 			// Close other dialogs if opening help
 			if a.showHelp {
 				a.showToolsDialog = false
 			}
 			return a, nil
 		case key.Matches(msg, helpEsc):
-			if a.app.PrimaryAgent.IsBusy() {
+			if a.app.PrimaryAgentOLD.IsBusy() {
 				if a.showQuit {
 					return a, nil
 				}
@@ -574,7 +563,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
 			a.app.SetFilepickerOpen(a.showFilepicker)
-			
 			// Close other dialogs if opening filepicker
 			if a.showFilepicker {
 				a.showToolsDialog = false
@@ -585,11 +573,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-
-	case pubsub.Event[logging.Log]:
-		a.pages[page.LogsPage], cmd = a.pages[page.LogsPage].Update(msg)
-		cmds = append(cmds, cmd)
-		return a, tea.Batch(cmds...)
 
 	case pubsub.Event[message.Message]:
 		a.pages[page.ChatPage], cmd = a.pages[page.ChatPage].Update(msg)
@@ -681,7 +664,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
-	
+
 	if a.showToolsDialog {
 		d, toolsCmd := a.toolsDialog.Update(msg)
 		a.toolsDialog = d.(dialog.ToolsDialog)
@@ -707,38 +690,12 @@ func (a *appModel) RegisterCommand(cmd dialog.Command) {
 }
 
 // getAvailableToolNames returns a list of all available tool names
-func getAvailableToolNames(app *app.App) []string {
-	// Get primary agent tools (which already include MCP tools)
-	allTools := agent.PrimaryAgentTools(
-		app.Permissions,
-		app.Sessions,
-		app.Messages,
-		app.History,
-		app.LSPClients,
-	)
-	
-	// Extract tool names
-	var toolNames []string
-	for _, tool := range allTools {
-		toolNames = append(toolNames, tool.Info().Name)
-	}
-	
-	return toolNames
+func getAvailableToolNames(_ *app.App) []string {
+	// TODO: Tools not implemented in API yet
+	return []string{"Tools not available in API mode"}
 }
 
 func (a *appModel) moveToPage(pageID page.PageID) tea.Cmd {
-	// Allow navigating to logs page even when agent is busy
-	if a.app.PrimaryAgent.IsBusy() && pageID != page.LogsPage {
-		// Don't move to other pages if the agent is busy
-		status.Warn("Agent is busy, please wait...")
-		return nil
-	}
-
-	return a.moveToPageUnconditional(pageID)
-}
-
-// moveToPageUnconditional is like moveToPage but doesn't check if the agent is busy
-func (a *appModel) moveToPageUnconditional(pageID page.PageID) tea.Cmd {
 	var cmds []tea.Cmd
 	if _, ok := a.loadedPages[pageID]; !ok {
 		cmd := a.pages[pageID].Init()
@@ -795,7 +752,7 @@ func (a appModel) View() string {
 
 	}
 
-	if !a.app.PrimaryAgent.IsBusy() {
+	if !a.app.PrimaryAgentOLD.IsBusy() {
 		a.status.SetHelpWidgetMsg("ctrl+? help")
 	} else {
 		a.status.SetHelpWidgetMsg("? help")
@@ -809,10 +766,7 @@ func (a appModel) View() string {
 		if a.showPermissions {
 			bindings = append(bindings, a.permissions.BindingKeys()...)
 		}
-		if a.currentPage == page.LogsPage {
-			bindings = append(bindings, logsKeyReturnKey)
-		}
-		if !a.app.PrimaryAgent.IsBusy() {
+		if !a.app.PrimaryAgentOLD.IsBusy() {
 			bindings = append(bindings, helpEsc)
 		}
 		a.help.SetBindings(bindings)
@@ -931,7 +885,7 @@ func (a appModel) View() string {
 			true,
 		)
 	}
-	
+
 	if a.showToolsDialog {
 		overlay := a.toolsDialog.View()
 		row := lipgloss.Height(appView) / 2
@@ -969,7 +923,6 @@ func New(app *app.App) tea.Model {
 		commands:      []dialog.Command{},
 		pages: map[page.PageID]tea.Model{
 			page.ChatPage: page.NewChatPage(app),
-			page.LogsPage: page.NewLogsPage(app),
 		},
 		filepicker: dialog.NewFilepickerCmp(app),
 	}

@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/message"
 	"github.com/sst/opencode/internal/session"
 	"github.com/sst/opencode/internal/status"
+	"github.com/sst/opencode/internal/tui/app"
 	"github.com/sst/opencode/internal/tui/components/chat"
 	"github.com/sst/opencode/internal/tui/components/dialog"
 	"github.com/sst/opencode/internal/tui/layout"
@@ -78,7 +78,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case dialog.CommandRunCustomMsg:
 		// Check if the agent is busy before executing custom commands
-		if p.app.PrimaryAgent.IsBusy() {
+		if p.app.PrimaryAgentOLD.IsBusy() {
 			status.Warn("Agent is busy, please wait before executing a command...")
 			return p, nil
 		}
@@ -105,20 +105,20 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := p.setSidebar()
 		cmds = append(cmds, cmd)
 	case state.CompactSessionMsg:
-		if p.app.CurrentSession.ID == "" {
+		if p.app.CurrentSessionOLD.ID == "" {
 			status.Warn("No active session to compact.")
 			return p, nil
 		}
 
 		// Run compaction in background
 		go func(sessionID string) {
-			err := p.app.PrimaryAgent.CompactSession(context.Background(), sessionID, false)
+			err := p.app.PrimaryAgentOLD.CompactSession(context.Background(), sessionID, false)
 			if err != nil {
 				status.Error(fmt.Sprintf("Compaction failed: %v", err))
 			} else {
 				status.Info("Conversation compacted successfully.")
 			}
-		}(p.app.CurrentSession.ID)
+		}(p.app.CurrentSessionOLD.ID)
 
 		return p, nil
 	case dialog.CompletionDialogCloseMsg:
@@ -131,16 +131,16 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.app.SetCompletionDialogOpen(true)
 			// Continue sending keys to layout->chat
 		case key.Matches(msg, keyMap.NewSession):
-			p.app.CurrentSession = &session.Session{}
+			p.app.CurrentSessionOLD = &session.Session{}
 			return p, tea.Batch(
 				p.clearSidebar(),
 				util.CmdHandler(state.SessionClearedMsg{}),
 			)
 		case key.Matches(msg, keyMap.Cancel):
-			if p.app.CurrentSession.ID != "" {
+			if p.app.CurrentSessionOLD.ID != "" {
 				// Cancel the current session's generation process
 				// This allows users to interrupt long-running operations
-				p.app.PrimaryAgent.Cancel(p.app.CurrentSession.ID)
+				p.app.PrimaryAgentOLD.Cancel(p.app.CurrentSessionOLD.ID)
 				return p, nil
 			}
 		case key.Matches(msg, keyMap.ToggleTools):
@@ -180,26 +180,11 @@ func (p *chatPage) clearSidebar() tea.Cmd {
 
 func (p *chatPage) sendMessage(text string, attachments []message.Attachment) tea.Cmd {
 	var cmds []tea.Cmd
-	if p.app.CurrentSession.ID == "" {
-		newSession, err := p.app.Sessions.Create(context.Background(), "New Session")
-		if err != nil {
-			status.Error(err.Error())
-			return nil
-		}
-
-		p.app.CurrentSession = &newSession
-
-		cmd := p.setSidebar()
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		cmds = append(cmds, util.CmdHandler(state.SessionSelectedMsg(&newSession)))
-	}
-
-	_, err := p.app.PrimaryAgent.Run(context.Background(), p.app.CurrentSession.ID, text, attachments...)
-	if err != nil {
-		status.Error(err.Error())
-		return nil
+	cmd := p.app.SendChatMessage(context.Background(), text, attachments)
+	cmds = append(cmds, cmd)
+	cmd = p.setSidebar()
+	if cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
 }

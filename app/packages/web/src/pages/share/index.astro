@@ -1,0 +1,28 @@
+---
+import config from "virtual:starlight/user-config";
+
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import Share from "../../components/Share.tsx";
+
+---
+
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title: "Share",
+    pagefind: false,
+    template: "splash",
+    tableOfContents: false,
+  }}
+>
+  <Share api={import.meta.env.VITE_API_URL} client:only="solid" />
+</StarlightPage>
+
+<style is:global>
+body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+  display: none;
+}
+body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
+  border-top: none !important;
+}
+</style>
