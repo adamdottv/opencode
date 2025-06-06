@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/status"
 )
 
@@ -80,6 +81,7 @@ func SkipHidden(path string) bool {
 		return true
 	}
 
+	cfg := config.Get()
 	commonIgnoredDirs := map[string]bool{
 		".opencode":        true,
 		"node_modules":     true,
@@ -101,6 +103,10 @@ func SkipHidden(path string) bool {
 		"generated":        true,
 		"bower_components": true,
 		"jspm_packages":    true,
+	}
+
+	for _, element := range cfg.Ignore.Folders {
+		commonIgnoredDirs[element] = true
 	}
 
 	parts := strings.Split(path, string(os.PathSeparator))
