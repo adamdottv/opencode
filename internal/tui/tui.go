@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/sst/opencode/internal/setup"
 	"log/slog"
 	"strings"
 
@@ -83,7 +84,7 @@ var keys = keyMap{
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("ctrl+t", "switch theme"),
 	),
-	
+
 	Tools: key.NewBinding(
 		key.WithKeys("f9"),
 		key.WithHelp("f9", "show available tools"),
@@ -126,6 +127,9 @@ type appModel struct {
 	showSessionDialog bool
 	sessionDialog     dialog.SessionDialog
 
+	showSetupDialog bool
+	setupDialog     dialog.SetupDialog
+
 	showCommandDialog bool
 	commandDialog     dialog.CommandDialog
 	commands          []dialog.Command
@@ -144,7 +148,7 @@ type appModel struct {
 
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
-	
+
 	showToolsDialog bool
 	toolsDialog     dialog.ToolsDialog
 }
@@ -162,6 +166,8 @@ func (a appModel) Init() tea.Cmd {
 	cmds = append(cmds, cmd)
 	cmd = a.sessionDialog.Init()
 	cmds = append(cmds, cmd)
+	cmd = a.setupDialog.Init()
+	cmds = append(cmds, cmd)
 	cmd = a.commandDialog.Init()
 	cmds = append(cmds, cmd)
 	cmd = a.modelDialog.Init()
@@ -175,14 +181,18 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.toolsDialog.Init()
 	cmds = append(cmds, cmd)
 
-	// Check if we should show the init dialog
+	// Check if we should show the setup or init dialog
 	cmds = append(cmds, func() tea.Msg {
-		shouldShow, err := config.ShouldShowInitDialog()
+		if !setup.IsSetupComplete() {
+			return dialog.ShowSetupDialogMsg{Show: true}
+		}
+
+		shouldShowInit, err := config.ShouldShowInitDialog()
 		if err != nil {
 			status.Error("Failed to check init status: " + err.Error())
 			return nil
 		}
-		return dialog.ShowInitDialogMsg{Show: shouldShow}
+		return dialog.ShowInitDialogMsg{Show: shouldShowInit}
 	})
 
 	return tea.Batch(cmds...)
@@ -203,6 +213,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case cursor.BlinkMsg:
+		a.setupDialog.Update(msg)
 		return a.updateAllPages(msg)
 	case spinner.TickMsg:
 		return a.updateAllPages(msg)
@@ -283,6 +294,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dialog.CloseQuitMsg:
 		a.showQuit = false
+
+		if !setup.IsSetupComplete() {
+			a.showSetupDialog = true
+		}
+
 		return a, nil
 
 	case dialog.CloseSessionDialogMsg:
@@ -292,6 +308,23 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case dialog.CloseSetupDialogMsg:
+		a.showSetupDialog = false
+
+		// Complete setup
+		setup.CompleteSetup(msg.Provider, msg.Model, msg.APIKey)
+
+		// Reinitialize the model dialog
+		a.modelDialog.Init()
+
+		// Reinitialize the primary agent
+		a.app.InitializePrimaryAgent()
+
+		// Initialize project
+		_, cmd = a.Update(dialog.CloseInitDialogMsg{Initialize: true})
+
+		return a, cmd
+
 	case dialog.CloseCommandDialogMsg:
 		a.showCommandDialog = false
 		return a, nil
@@ -299,11 +332,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseThemeDialogMsg:
 		a.showThemeDialog = false
 		return a, nil
-		
+
 	case dialog.CloseToolsDialogMsg:
 		a.showToolsDialog = false
 		return a, nil
-		
+
 	case dialog.ShowToolsDialogMsg:
 		a.showToolsDialog = msg.Show
 		return a, nil
@@ -332,6 +365,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dialog.ShowInitDialogMsg:
 		a.showInitDialog = msg.Show
+		return a, nil
+
+	case dialog.ShowSetupDialogMsg:
+		a.showSetupDialog = msg.Show
 		return a, nil
 
 	case dialog.CloseInitDialogMsg:
@@ -411,6 +448,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.showSessionDialog {
 				a.showSessionDialog = false
 			}
+			if a.showSetupDialog {
+				a.showSetupDialog = false
+			}
 			if a.showCommandDialog {
 				a.showCommandDialog = false
 			}
@@ -436,7 +476,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showThemeDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				// Load sessions and show the dialog
 				sessions, err := a.app.Sessions.List(context.Background())
 				if err != nil {
@@ -457,7 +497,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Close other dialogs
 				a.showToolsDialog = false
 				a.showModelDialog = false
-				
+
 				// Show commands dialog
 				if len(a.commands) == 0 {
 					status.Warn("No commands available")
@@ -478,7 +518,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showThemeDialog = false
 				a.showFilepicker = false
-				
+
 				a.showModelDialog = true
 				return a, nil
 			}
@@ -489,17 +529,17 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showToolsDialog = false
 				a.showModelDialog = false
 				a.showFilepicker = false
-				
+
 				a.showThemeDialog = true
 				return a, a.themeDialog.Init()
 			}
 			return a, nil
 		case key.Matches(msg, keys.Tools):
 			// Check if any other dialog is open
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && 
-			   !a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog && 
-			   !a.showFilepicker && !a.showModelDialog && !a.showInitDialog && 
-			   !a.showMultiArgumentsDialog {
+			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions &&
+				!a.showSessionDialog && !a.showCommandDialog && !a.showThemeDialog &&
+				!a.showFilepicker && !a.showModelDialog && !a.showInitDialog &&
+				!a.showMultiArgumentsDialog {
 				// Toggle tools dialog
 				a.showToolsDialog = !a.showToolsDialog
 				if a.showToolsDialog {
@@ -522,6 +562,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if a.showQuit {
 					a.showQuit = !a.showQuit
+
+					if !setup.IsSetupComplete() {
+						a.showSetupDialog = true
+					}
+
 					return a, nil
 				}
 				if a.showHelp {
@@ -555,7 +600,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.showHelp = !a.showHelp
-			
+
 			// Close other dialogs if opening help
 			if a.showHelp {
 				a.showToolsDialog = false
@@ -574,7 +619,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.showFilepicker = !a.showFilepicker
 			a.filepicker.ToggleFilepicker(a.showFilepicker)
 			a.app.SetFilepickerOpen(a.showFilepicker)
-			
+
 			// Close other dialogs if opening filepicker
 			if a.showFilepicker {
 				a.showToolsDialog = false
@@ -642,6 +687,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if a.showSetupDialog {
+		d, setupCmd := a.setupDialog.Update(msg)
+		a.setupDialog = d.(dialog.SetupDialog)
+		cmds = append(cmds, setupCmd)
+		// Only block key messages send all other messages down
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return a, tea.Batch(cmds...)
+		}
+	}
+
 	if a.showCommandDialog {
 		d, commandCmd := a.commandDialog.Update(msg)
 		a.commandDialog = d.(dialog.CommandDialog)
@@ -681,7 +736,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 	}
-	
+
 	if a.showToolsDialog {
 		d, toolsCmd := a.toolsDialog.Update(msg)
 		a.toolsDialog = d.(dialog.ToolsDialog)
@@ -716,13 +771,13 @@ func getAvailableToolNames(app *app.App) []string {
 		app.History,
 		app.LSPClients,
 	)
-	
+
 	// Extract tool names
 	var toolNames []string
 	for _, tool := range allTools {
 		toolNames = append(toolNames, tool.Info().Name)
 	}
-	
+
 	return toolNames
 }
 
@@ -861,6 +916,21 @@ func (a appModel) View() string {
 		)
 	}
 
+	if a.showSetupDialog {
+		overlay := a.setupDialog.View()
+		row := lipgloss.Height(appView) / 2
+		row -= lipgloss.Height(overlay) / 2
+		col := lipgloss.Width(appView) / 2
+		col -= lipgloss.Width(overlay) / 2
+		appView = layout.PlaceOverlay(
+			col,
+			row,
+			overlay,
+			appView,
+			true,
+		)
+	}
+
 	if a.showModelDialog {
 		overlay := a.modelDialog.View()
 		row := lipgloss.Height(appView) / 2
@@ -931,7 +1001,7 @@ func (a appModel) View() string {
 			true,
 		)
 	}
-	
+
 	if a.showToolsDialog {
 		overlay := a.toolsDialog.View()
 		row := lipgloss.Height(appView) / 2
@@ -959,6 +1029,7 @@ func New(app *app.App) tea.Model {
 		help:          dialog.NewHelpCmp(),
 		quit:          dialog.NewQuitCmp(),
 		sessionDialog: dialog.NewSessionDialogCmp(),
+		setupDialog:   dialog.NewSetupDialogCmp(),
 		commandDialog: dialog.NewCommandDialogCmp(),
 		modelDialog:   dialog.NewModelDialogCmp(),
 		permissions:   dialog.NewPermissionDialogCmp(),
