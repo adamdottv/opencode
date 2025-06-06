@@ -41,6 +41,8 @@ type ShowMultiArgumentsDialogMsg struct {
 	CommandID string
 	Content   string
 	ArgNames  []string
+	Arguments []Argument
+	Handler   ArgumentHandler
 }
 
 // CloseMultiArgumentsDialogMsg is a message that is sent when the multi-arguments dialog is closed.
