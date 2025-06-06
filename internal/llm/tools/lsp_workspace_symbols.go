@@ -81,12 +81,18 @@ func (b *workspaceSymbolsTool) Run(ctx context.Context, call ToolCall) (ToolResp
 		return NewTextResponse("\nLSP clients are still initializing. Workspace symbols lookup will be available once they're ready.\n"), nil
 	}
 
-	output := getWorkspaceSymbols(ctx, params.Query, lsps)
+	output := GetWorkspaceSymbolsString(ctx, params.Query, lsps)
 
 	return NewTextResponse(output), nil
 }
 
-func getWorkspaceSymbols(ctx context.Context, query string, lsps map[string]*lsp.Client) string {
+func GetWorkspaceSymbolsString(ctx context.Context, query string, lsps map[string]*lsp.Client) string {
+	symbols := GetWorkspaceSymbols(ctx, query, lsps)
+
+	return strings.Join(symbols, "\n")
+}
+
+func GetWorkspaceSymbols(ctx context.Context, query string, lsps map[string]*lsp.Client) []string {
 	var results []string
 
 	for lspName, client := range lsps {
@@ -117,10 +123,10 @@ func getWorkspaceSymbols(ctx context.Context, query string, lsps map[string]*lsp
 	}
 
 	if len(results) == 0 {
-		return fmt.Sprintf("No symbols found matching query '%s'.", query)
+		return []string{fmt.Sprintf("No symbols found matching query '%s'.", query)}
 	}
 
-	return strings.Join(results, "\n")
+	return results
 }
 
 func processWorkspaceSymbolResult(result protocol.Or_Result_workspace_symbol) []SymbolInfo {
@@ -160,3 +166,4 @@ func formatWorkspaceLocation(location protocol.Location) string {
 	path := strings.TrimPrefix(string(location.URI), "file://")
 	return fmt.Sprintf("%s:%d:%d", path, location.Range.Start.Line+1, location.Range.Start.Character+1)
 }
+
