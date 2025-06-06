@@ -47,6 +47,18 @@ func TestThemeRegistration(t *testing.T) {
 		t.Errorf("Monokai theme is not registered")
 	}
 
+	// Check if "nord" theme is registered
+	nordFound := false
+	for _, themeName := range availableThemes {
+		if themeName == "nord" {
+			nordFound = true
+			break
+		}
+	}
+	if !nordFound {
+		t.Errorf("Nord theme is not registered")
+	}
+
 	// Try to get the themes and make sure they're not nil
 	catppuccin := GetTheme("catppuccin")
 	if catppuccin == nil {
