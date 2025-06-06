@@ -7,7 +7,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/alecthomas/chroma/v2 v2.15.0
-	github.com/anthropics/anthropic-sdk-go v0.2.0-beta.2
+	github.com/anthropics/anthropic-sdk-go v1.4.0
 	github.com/aymanbagabas/go-udiff v0.2.0
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/catppuccin/go v0.3.0
@@ -15,6 +15,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/glamour v0.9.1
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/charmbracelet/log v0.4.2
 	github.com/charmbracelet/x/ansi v0.8.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/go-logfmt/logfmt v0.6.0
@@ -34,10 +35,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
-require (
-	github.com/charmbracelet/log v0.4.2 // indirect
-	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-)
+require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
 require (
 	cloud.google.com/go v0.116.0 // indirect
@@ -126,7 +124,7 @@ require (
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/genai v1.3.0
+	google.golang.org/genai v1.10.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	google.golang.org/grpc v1.71.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
