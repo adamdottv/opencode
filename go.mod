@@ -1,5 +1,7 @@
 module github.com/sst/opencode
 
+retract v0.0.53 // accidentally published JS version instead of Go
+
 go 1.24.0
 
 require (
