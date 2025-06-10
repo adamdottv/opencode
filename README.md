@@ -419,11 +419,14 @@ OpenCode supports multiple themes for customizing the appearance of the terminal
 The following predefined themes are available:
 
 - `opencode` (default)
+- `ayu`
 - `catppuccin`
 - `dracula`
+- `everforest`
 - `flexoki`
 - `gruvbox`
 - `monokai`
+- `nord`
 - `onedark`
 - `tokyonight`
 - `tron`
