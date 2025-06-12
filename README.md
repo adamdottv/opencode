@@ -54,7 +54,7 @@ paru -S opencode-bin
 ### Using Go
 
 ```bash
-go install github.com/sst/opencode@latest
+go install github.com/sst/opencode@v0.0.52
 ```
 
 ## Configuration
