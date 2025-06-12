@@ -283,7 +283,6 @@ func (o *openaiClient) streamChatCompletionMessages(ctx context.Context, message
 	return eventChan
 }
 
-
 func (o *openaiClient) chatCompletionToolCalls(completion openai.ChatCompletion) []message.ToolCall {
 	var toolCalls []message.ToolCall
 
@@ -314,4 +313,3 @@ func (o *openaiClient) usage(completion openai.ChatCompletion) TokenUsage {
 		CacheReadTokens:     cachedTokens,
 	}
 }
-

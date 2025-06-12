@@ -161,8 +161,8 @@ func documentSymbolToSymbolInfo(symbol protocol.DocumentSymbol) SymbolInfo {
 	info := SymbolInfo{
 		Name: symbol.Name,
 		Kind: symbolKindToString(symbol.Kind),
-		Location: fmt.Sprintf("Line %d-%d", 
-			symbol.Range.Start.Line+1, 
+		Location: fmt.Sprintf("Line %d-%d",
+			symbol.Range.Start.Line+1,
 			symbol.Range.End.Line+1),
 		Children: []SymbolInfo{},
 	}
@@ -175,8 +175,8 @@ func documentSymbolToSymbolInfo(symbol protocol.DocumentSymbol) SymbolInfo {
 }
 
 func locationToString(location protocol.Location) string {
-	return fmt.Sprintf("Line %d-%d", 
-		location.Range.Start.Line+1, 
+	return fmt.Sprintf("Line %d-%d",
+		location.Range.Start.Line+1,
 		location.Range.End.Line+1)
 }
 
@@ -190,15 +190,15 @@ func symbolKindToString(kind protocol.SymbolKind) string {
 func formatSymbol(symbol SymbolInfo, level int) string {
 	indent := strings.Repeat("  ", level)
 	result := fmt.Sprintf("%s- %s (%s) %s", indent, symbol.Name, symbol.Kind, symbol.Location)
-	
+
 	var childResults []string
 	for _, child := range symbol.Children {
 		childResults = append(childResults, formatSymbol(child, level+1))
 	}
-	
+
 	if len(childResults) > 0 {
 		return result + "\n" + strings.Join(childResults, "\n")
 	}
-	
+
 	return result
 }

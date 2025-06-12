@@ -12,13 +12,13 @@ import (
 )
 
 type CodeActionParams struct {
-	FilePath   string `json:"file_path"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column"`
-	EndLine    int    `json:"end_line,omitempty"`
-	EndColumn  int    `json:"end_column,omitempty"`
-	ActionID   int    `json:"action_id,omitempty"`
-	LspName    string `json:"lsp_name,omitempty"`
+	FilePath  string `json:"file_path"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"end_line,omitempty"`
+	EndColumn int    `json:"end_column,omitempty"`
+	ActionID  int    `json:"action_id,omitempty"`
+	LspName   string `json:"lsp_name,omitempty"`
 }
 
 type codeActionTool struct {
@@ -125,7 +125,7 @@ func (b *codeActionTool) Run(ctx context.Context, call ToolCall) (ToolResponse, 
 	// Convert 1-based line/column to 0-based for LSP protocol
 	line := max(0, params.Line-1)
 	column := max(0, params.Column-1)
-	
+
 	// Handle optional end line/column
 	endLine := line
 	endColumn := column
@@ -215,9 +215,9 @@ func formatCodeAction(action protocol.Or_Result_textDocument_codeAction_Item0_El
 		if v.Kind != "" {
 			kind = string(v.Kind)
 		}
-		
+
 		var details []string
-		
+
 		// Add edit information if available
 		if v.Edit != nil {
 			numChanges := 0
@@ -229,28 +229,28 @@ func formatCodeAction(action protocol.Or_Result_textDocument_codeAction_Item0_El
 			}
 			details = append(details, fmt.Sprintf("Edits: %d changes", numChanges))
 		}
-		
+
 		// Add command information if available
 		if v.Command != nil {
 			details = append(details, fmt.Sprintf("Command: %s", v.Command.Title))
 		}
-		
+
 		// Add diagnostics information if available
 		if v.Diagnostics != nil && len(v.Diagnostics) > 0 {
 			details = append(details, fmt.Sprintf("Fixes: %d diagnostics", len(v.Diagnostics)))
 		}
-		
+
 		detailsStr := ""
 		if len(details) > 0 {
 			detailsStr = " (" + strings.Join(details, ", ") + ")"
 		}
-		
+
 		return fmt.Sprintf("  %d. %s [%s]%s", index, v.Title, kind, detailsStr)
-		
+
 	case protocol.Command:
 		return fmt.Sprintf("  %d. %s [Command]", index, v.Title)
 	}
-	
+
 	return fmt.Sprintf("  %d. Unknown code action type", index)
 }
 

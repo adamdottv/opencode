@@ -76,10 +76,10 @@ func ImagePreview(width int, filename string) (string, error) {
 
 func ImageToBytes(image image.Image) ([]byte, error) {
 	buf := new(bytes.Buffer)
-    err := png.Encode(buf, image)
-    if err != nil {
-        return nil, err
-    }
-    
-    return buf.Bytes(), nil
+	err := png.Encode(buf, image)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

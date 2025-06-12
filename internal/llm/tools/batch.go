@@ -23,7 +23,7 @@ type BatchToolResult struct {
 	Result    json.RawMessage `json:"result"`
 	Error     string          `json:"error,omitempty"`
 	// Added for better formatting and separation between results
-	Separator string          `json:"separator,omitempty"`
+	Separator string `json:"separator,omitempty"`
 }
 
 type BatchResult struct {
@@ -155,7 +155,7 @@ func (b *batchTool) Run(ctx context.Context, call ToolCall) (ToolResponse, error
 				if err := json.Unmarshal([]byte(response.Metadata), &metadata); err == nil {
 					// Add tool name to metadata for better context
 					metadata["tool"] = tc.Name
-					
+
 					// Re-marshal with consistent formatting
 					if metadataBytes, err := json.MarshalIndent(metadata, "", "  "); err == nil {
 						response.Metadata = string(metadataBytes)

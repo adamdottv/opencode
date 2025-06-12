@@ -1,16 +1,15 @@
 package provider
 
-
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/sst/opencode/internal/llm/models"
 	"github.com/sst/opencode/internal/llm/tools"
 	"github.com/sst/opencode/internal/message"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -121,7 +120,6 @@ func (o *openaiClient) convertToResponseTools(tools []tools.BaseTool) []response
 
 	return outputTools
 }
-
 
 func (o *openaiClient) preparedResponseParams(input responses.ResponseInputParam, tools []responses.ToolUnionParam) responses.ResponseNewParams {
 	params := responses.ResponseNewParams{
@@ -358,7 +356,6 @@ func (o *openaiClient) streamResponseMessages(ctx context.Context, messages []me
 
 	return eventChan
 }
-
 
 func (o *openaiClient) responseToolCalls(response responses.Response) []message.ToolCall {
 	var toolCalls []message.ToolCall

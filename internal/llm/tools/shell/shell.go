@@ -61,11 +61,11 @@ func GetPersistentShell(workingDir string) *PersistentShell {
 
 func newPersistentShell(cwd string) *PersistentShell {
 	cfg := config.Get()
-	
+
 	// Use shell from config if specified
 	shellPath := ""
 	shellArgs := []string{"-l"}
-	
+
 	if cfg != nil && cfg.Shell.Path != "" {
 		shellPath = cfg.Shell.Path
 		if len(cfg.Shell.Args) > 0 {

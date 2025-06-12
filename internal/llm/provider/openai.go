@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/sst/opencode/internal/llm/models"
 	"github.com/sst/opencode/internal/llm/tools"
 	"github.com/sst/opencode/internal/message"
+	"log/slog"
 )
 
 type openaiOptions struct {
@@ -73,7 +73,6 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 	return o.streamChatCompletionMessages(ctx, messages, tools)
 }
 
-
 func (o *openaiClient) finishReason(reason string) message.FinishReason {
 	switch reason {
 	case "stop":
@@ -86,7 +85,6 @@ func (o *openaiClient) finishReason(reason string) message.FinishReason {
 		return message.FinishReasonUnknown
 	}
 }
-
 
 func (o *openaiClient) shouldRetry(attempts int, err error) (bool, int64, error) {
 	var apierr *openai.Error
@@ -115,7 +113,6 @@ func (o *openaiClient) shouldRetry(attempts int, err error) (bool, int64, error)
 	}
 	return true, int64(retryMs), nil
 }
-
 
 func WithOpenAIBaseURL(baseURL string) OpenAIOption {
 	return func(options *openaiOptions) {

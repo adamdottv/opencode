@@ -102,9 +102,9 @@ func TestMockCheckStdinPipe(t *testing.T) {
 	t.Run("WithData", func(t *testing.T) {
 		testData := "test data"
 		reader := bytes.NewBufferString(testData)
-		
+
 		data, hasPiped := mockCheckStdinPipe(reader, true)
-		
+
 		if !hasPiped {
 			t.Error("Expected hasPiped to be true, got false")
 		}
@@ -112,13 +112,13 @@ func TestMockCheckStdinPipe(t *testing.T) {
 			t.Errorf("Expected data to be %q, got %q", testData, data)
 		}
 	})
-	
+
 	// Test without data
 	t.Run("WithoutData", func(t *testing.T) {
 		reader := bytes.NewBufferString("")
-		
+
 		data, hasPiped := mockCheckStdinPipe(reader, true)
-		
+
 		if hasPiped {
 			t.Error("Expected hasPiped to be false, got true")
 		}
@@ -126,13 +126,13 @@ func TestMockCheckStdinPipe(t *testing.T) {
 			t.Errorf("Expected data to be empty, got %q", data)
 		}
 	})
-	
+
 	// Test not a pipe
 	t.Run("NotAPipe", func(t *testing.T) {
 		reader := bytes.NewBufferString("data that should be ignored")
-		
+
 		data, hasPiped := mockCheckStdinPipe(reader, false)
-		
+
 		if hasPiped {
 			t.Error("Expected hasPiped to be false, got true")
 		}

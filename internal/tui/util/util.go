@@ -1,7 +1,20 @@
 package util
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
+)
+
+type (
+	StatusMsg struct {
+		Text string
+		TTL  time.Duration
+	}
+	ClearStatusMsg struct{}
+	FocusMsg       struct {
+		Focused bool
+	}
 )
 
 func CmdHandler(msg tea.Msg) tea.Cmd {

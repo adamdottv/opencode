@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,10 +38,10 @@ type editorCmp struct {
 }
 
 type EditorKeyMaps struct {
-	Send       key.Binding
-	OpenEditor key.Binding
-	Paste      key.Binding
-	HistoryUp  key.Binding
+	Send        key.Binding
+	OpenEditor  key.Binding
+	Paste       key.Binding
+	HistoryUp   key.Binding
 	HistoryDown key.Binding
 }
 
@@ -190,6 +191,15 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		m.attachments = append(m.attachments, msg.Attachment)
+	case util.FocusMsg:
+		if msg.Focused {
+			// Show blinking cursor when pane is focused
+			cmd = m.textarea.Cursor.SetMode(cursor.CursorBlink)
+		} else {
+			// Hide cursor when pane is not focused
+			cmd = m.textarea.Cursor.SetMode(cursor.CursorHide)
+		}
+		return m, cmd
 	case tea.KeyMsg:
 		if key.Matches(msg, DeleteKeyMaps.AttachmentDeleteMode) {
 			m.deleteMode = true
@@ -251,14 +261,14 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryUp) && !m.app.IsFilepickerOpen() && !m.app.IsCompletionDialogOpen() {
 			// Get the current line number
 			currentLine := m.textarea.Line()
-			
+
 			// Only navigate history if we're at the first line
 			if currentLine == 0 && len(m.history) > 0 {
 				// Save current message if we're just starting to navigate
 				if m.historyIndex == len(m.history) {
 					m.currentMessage = m.textarea.Value()
 				}
-				
+
 				// Go to previous message in history
 				if m.historyIndex > 0 {
 					m.historyIndex--
@@ -267,14 +277,14 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		
+
 		if m.textarea.Focused() && key.Matches(msg, editorMaps.HistoryDown) && !m.app.IsFilepickerOpen() && !m.app.IsCompletionDialogOpen() {
 			// Get the current line number and total lines
 			currentLine := m.textarea.Line()
 			value := m.textarea.Value()
 			lines := strings.Split(value, "\n")
 			totalLines := len(lines)
-			
+
 			// Only navigate history if we're at the last line
 			if currentLine == totalLines-1 {
 				if m.historyIndex < len(m.history)-1 {
@@ -397,16 +407,20 @@ func CreateTextArea(existing *textarea.Model) textarea.Model {
 	}
 
 	ta.Focus()
+
+	// Set initial cursor mode to blinking (default to focused)
+	ta.Cursor.SetMode(cursor.CursorBlink)
+
 	return ta
 }
 
 func NewEditorCmp(app *app.App) tea.Model {
 	ta := CreateTextArea(nil)
 	return &editorCmp{
-		app:          app,
-		textarea:     ta,
-		history:      []string{},
-		historyIndex: 0,
+		app:            app,
+		textarea:       ta,
+		history:        []string{},
+		historyIndex:   0,
 		currentMessage: "",
 	}
 }

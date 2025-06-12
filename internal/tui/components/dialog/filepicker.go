@@ -42,7 +42,7 @@ type FilePrickerKeyMap struct {
 	OpenFilePicker key.Binding
 	Esc            key.Binding
 	InsertCWD      key.Binding
-	Paste 		   key.Binding
+	Paste          key.Binding
 }
 
 var filePickerKeyMap = FilePrickerKeyMap{

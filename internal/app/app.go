@@ -40,9 +40,9 @@ type App struct {
 	watcherCancelFuncs []context.CancelFunc
 	cancelFuncsMutex   sync.Mutex
 	watcherWG          sync.WaitGroup
-	
+
 	// UI state
-	filepickerOpen bool
+	filepickerOpen       bool
 	completionDialogOpen bool
 }
 

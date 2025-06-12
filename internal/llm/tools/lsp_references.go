@@ -158,4 +158,3 @@ func getReferences(ctx context.Context, filePath string, line, column int, inclu
 
 	return strings.Join(results, "\n")
 }
-

@@ -39,7 +39,7 @@ func (t toolItem) Render(selected bool, width int) string {
 	baseStyle := styles.BaseStyle().
 		Width(width).
 		Background(th.Background())
-	
+
 	if selected {
 		baseStyle = baseStyle.
 			Background(th.Primary()).
@@ -49,15 +49,15 @@ func (t toolItem) Render(selected bool, width int) string {
 		baseStyle = baseStyle.
 			Foreground(th.Text())
 	}
-	
+
 	return baseStyle.Render(t.name)
 }
 
 type toolsDialogCmp struct {
-	tools       []toolItem
-	width       int
-	height      int
-	list        utilComponents.SimpleList[toolItem]
+	tools  []toolItem
+	width  int
+	height int
+	list   utilComponents.SimpleList[toolItem]
 }
 
 type toolsKeyMap struct {
@@ -100,7 +100,7 @@ func (m *toolsDialogCmp) SetTools(tools []string) {
 	for _, name := range tools {
 		toolItems = append(toolItems, toolItem{name: name})
 	}
-	
+
 	m.tools = toolItems
 	m.list.SetItems(toolItems)
 }
@@ -144,7 +144,7 @@ func (m *toolsDialogCmp) View() string {
 	// Calculate dialog width based on content
 	dialogWidth := min(maxToolsDialogWidth, m.width/2)
 	m.list.SetMaxWidth(dialogWidth)
-	
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
@@ -171,7 +171,7 @@ func NewToolsDialogCmp() ToolsDialog {
 		"No tools available",
 		true,
 	)
-	
+
 	return &toolsDialogCmp{
 		list: list,
 	}

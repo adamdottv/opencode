@@ -206,7 +206,7 @@ func (p *permissionDialogCmp) renderHeader() string {
 		Render(fmt.Sprintf(": %s", p.permission.ToolName))
 
 	pathKey := baseStyle.Foreground(t.TextMuted()).Bold(true).Render("Path")
-	
+
 	// Get the current working directory to display relative path
 	relativePath := p.permission.Path
 	if filepath.IsAbs(relativePath) {
@@ -214,7 +214,7 @@ func (p *permissionDialogCmp) renderHeader() string {
 			relativePath = cwd
 		}
 	}
-	
+
 	pathValue := baseStyle.
 		Foreground(t.Text()).
 		Width(p.width - lipgloss.Width(pathKey)).

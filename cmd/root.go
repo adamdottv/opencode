@@ -22,6 +22,7 @@ import (
 	"github.com/sst/opencode/internal/lsp/discovery"
 	"github.com/sst/opencode/internal/pubsub"
 	"github.com/sst/opencode/internal/tui"
+	"github.com/sst/opencode/internal/tui/util"
 	"github.com/sst/opencode/internal/version"
 )
 
@@ -92,7 +93,7 @@ to assist developers in writing, debugging, and understanding code directly from
 
 		// Check if we're in non-interactive mode
 		prompt, _ := cmd.Flags().GetString("prompt")
-		
+
 		// Check for piped input if no prompt was provided via flag
 		if prompt == "" {
 			pipedInput, hasPipedInput := checkStdinPipe()
@@ -100,7 +101,7 @@ to assist developers in writing, debugging, and understanding code directly from
 				prompt = pipedInput
 			}
 		}
-		
+
 		// If we have a prompt (either from flag or piped input), run in non-interactive mode
 		if prompt != "" {
 			outputFormatStr, _ := cmd.Flags().GetString("output-format")
@@ -154,6 +155,14 @@ to assist developers in writing, debugging, and understanding code directly from
 
 		// Setup the subscriptions, this will send services events to the TUI
 		ch, cancelSubs := setupSubscriptions(app, ctx)
+
+		// Start focus tracking
+		focusTracker := util.NewFocusTracker(program)
+		if err := focusTracker.Start(ctx); err != nil {
+			slog.Warn("Failed to start focus tracking", "error", err)
+		} else {
+			slog.Info("Started focus tracking")
+		}
 
 		// Create a context for the TUI message handler
 		tuiCtx, tuiCancel := context.WithCancel(ctx)
@@ -332,7 +341,7 @@ func checkStdinPipe() (string, bool) {
 		if err != nil {
 			return "", false
 		}
-		
+
 		// If we got data, return it
 		if len(data) > 0 {
 			return string(data), true

@@ -674,7 +674,7 @@ func (a *agent) CompactSession(ctx context.Context, sessionID string, force bool
 	}
 
 	messages := []message.Message{
-		message.Message{
+		{
 			Role: message.System,
 			Parts: []message.ContentPart{
 				message.TextContent{
