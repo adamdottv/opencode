@@ -115,8 +115,9 @@ to assist developers in writing, debugging, and understanding code directly from
 			// Get tool restriction flags
 			allowedTools, _ := cmd.Flags().GetStringSlice("allowedTools")
 			excludedTools, _ := cmd.Flags().GetStringSlice("excludedTools")
+			permissionPromptTool, _ := cmd.Flags().GetString("permission-prompt-tool")
 
-			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, verbose, allowedTools, excludedTools)
+			return handleNonInteractiveMode(cmd.Context(), prompt, outputFormat, quiet, verbose, allowedTools, excludedTools, permissionPromptTool)
 		}
 
 		// Run LSP auto-discovery
@@ -352,6 +353,7 @@ func init() {
 	rootCmd.Flags().BoolP("verbose", "", false, "Display logs to stderr in non-interactive mode")
 	rootCmd.Flags().StringSlice("allowedTools", nil, "Restrict the agent to only use the specified tools in non-interactive mode (comma-separated list)")
 	rootCmd.Flags().StringSlice("excludedTools", nil, "Prevent the agent from using the specified tools in non-interactive mode (comma-separated list)")
+	rootCmd.Flags().String("permission-prompt-tool", "", "MCP tool for handling permission prompts in non-interactive mode")
 
 	// Make allowedTools and excludedTools mutually exclusive
 	rootCmd.MarkFlagsMutuallyExclusive("allowedTools", "excludedTools")

@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -16,6 +17,35 @@ import (
 )
 
 var ErrorPermissionDenied = errors.New("permission denied")
+
+// Tool represents a tool that can be executed (avoiding import cycle with tools package)
+type Tool interface {
+	Info() ToolInfo
+	Run(ctx context.Context, params ToolCall) (ToolResponse, error)
+}
+
+// ToolInfo represents tool information
+type ToolInfo struct {
+	Name        string
+	Description string
+	Parameters  map[string]any
+	Required    []string
+}
+
+// ToolCall represents a tool call
+type ToolCall struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Input string `json:"input"`
+}
+
+// ToolResponse represents a tool response
+type ToolResponse struct {
+	Type     string `json:"type"`
+	Content  string `json:"content"`
+	Metadata string `json:"metadata,omitempty"`
+	IsError  bool   `json:"is_error"`
+}
 
 type CreatePermissionRequest struct {
 	SessionID   string `json:"session_id"`
@@ -58,16 +88,20 @@ type Service interface {
 	Request(ctx context.Context, opts CreatePermissionRequest) bool
 	AutoApproveSession(ctx context.Context, sessionID string)
 	IsAutoApproved(ctx context.Context, sessionID string) bool
+	SetPermissionPromptTool(ctx context.Context, sessionID string, tool Tool)
+	GetPermissionPromptTool(ctx context.Context, sessionID string) (Tool, bool)
+	ParseMCPResponse(ctx context.Context, response string) bool
 }
 
 type permissionService struct {
 	broker         *pubsub.Broker[PermissionRequest]
 	responseBroker *pubsub.Broker[PermissionResponse]
 
-	sessionPermissions  map[string][]PermissionRequest
-	pendingRequests     sync.Map
-	autoApproveSessions map[string]bool
-	mu                  sync.RWMutex
+	sessionPermissions   map[string][]PermissionRequest
+	pendingRequests      sync.Map
+	autoApproveSessions  map[string]bool
+	permissionPromptTool map[string]Tool // sessionID -> actual tool instance
+	mu                   sync.RWMutex
 }
 
 var globalPermissionService *permissionService
@@ -77,10 +111,11 @@ func InitService() error {
 		return fmt.Errorf("permission service already initialized")
 	}
 	globalPermissionService = &permissionService{
-		broker:              pubsub.NewBroker[PermissionRequest](),
-		responseBroker:      pubsub.NewBroker[PermissionResponse](),
-		sessionPermissions:  make(map[string][]PermissionRequest),
-		autoApproveSessions: make(map[string]bool),
+		broker:               pubsub.NewBroker[PermissionRequest](),
+		responseBroker:       pubsub.NewBroker[PermissionResponse](),
+		sessionPermissions:   make(map[string][]PermissionRequest),
+		autoApproveSessions:  make(map[string]bool),
+		permissionPromptTool: make(map[string]Tool),
 	}
 	return nil
 }
@@ -138,6 +173,13 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		s.mu.RUnlock()
 		return true
 	}
+
+	// Check if we have a permission prompt tool configured for this session
+	if tool, hasTool := s.permissionPromptTool[opts.SessionID]; hasTool {
+		s.mu.RUnlock()
+		return s.callPermissionPromptTool(ctx, opts, tool)
+	}
+	s.mu.RUnlock()
 
 	requestPath := opts.Path
 	if !filepath.IsAbs(requestPath) {
@@ -205,6 +247,94 @@ func (s *permissionService) IsAutoApproved(ctx context.Context, sessionID string
 	return s.autoApproveSessions[sessionID]
 }
 
+func (s *permissionService) SetPermissionPromptTool(ctx context.Context, sessionID string, tool Tool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.permissionPromptTool[sessionID] = tool
+	
+	slog.Info("Set permission prompt tool for session", "sessionID", sessionID, "tool", tool.Info().Name)
+}
+
+func (s *permissionService) GetPermissionPromptTool(ctx context.Context, sessionID string) (Tool, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	tool, exists := s.permissionPromptTool[sessionID]
+	return tool, exists
+}
+
+func (s *permissionService) ParseMCPResponse(ctx context.Context, response string) bool {
+	// Parse MCP tool response according to claude-code spec
+	var responseObj map[string]interface{}
+	if err := json.Unmarshal([]byte(response), &responseObj); err != nil {
+		slog.Error("Failed to parse MCP permission response as JSON", "response", response, "error", err)
+		return false
+	}
+	
+	// Check the behavior field according to claude-code spec
+	behavior, ok := responseObj["behavior"].(string)
+	if !ok {
+		slog.Error("Missing or invalid 'behavior' field in MCP permission response", "response", response)
+		return false
+	}
+	
+	switch behavior {
+	case "allow":
+		slog.Debug("Permission granted by MCP tool", "response", response)
+		return true
+	case "deny":
+		if message, ok := responseObj["message"].(string); ok {
+			slog.Info("Permission denied by MCP tool", "reason", message)
+		} else {
+			slog.Info("Permission denied by MCP tool")
+		}
+		return false
+	default:
+		slog.Error("Invalid behavior in MCP permission response", "behavior", behavior)
+		return false
+	}
+}
+
+func (s *permissionService) callPermissionPromptTool(ctx context.Context, opts CreatePermissionRequest, tool Tool) bool {
+	// Create the permission request payload matching claude-code format
+	requestPayload := map[string]interface{}{
+		"id":          opts.SessionID + "_" + opts.ToolName + "_" + opts.Action,
+		"session_id":  opts.SessionID,
+		"tool_name":   opts.ToolName,
+		"description": opts.Description,
+		"action":      opts.Action,
+		"params":      opts.Params,
+		"path":        opts.Path,
+	}
+	
+	// Convert payload to JSON string (same format as existing MCP tools expect)
+	payloadJSON, err := json.Marshal(requestPayload)
+	if err != nil {
+		slog.Error("Failed to marshal permission request payload", "error", err)
+		return false
+	}
+	
+	// Call the tool using the existing tool interface
+	toolCall := ToolCall{
+		ID:    opts.SessionID + "_permission_check",
+		Name:  tool.Info().Name,
+		Input: string(payloadJSON),
+	}
+	
+	result, err := tool.Run(ctx, toolCall)
+	if err != nil {
+		slog.Error("MCP permission tool execution failed", "error", err, "tool", tool.Info().Name)
+		return false
+	}
+	
+	if result.IsError {
+		slog.Error("MCP permission tool returned error", "error", result.Content, "tool", tool.Info().Name)
+		return false
+	}
+	
+	// Parse the response using our existing parser
+	return s.ParseMCPResponse(ctx, result.Content)
+}
+
 func (s *permissionService) Subscribe(ctx context.Context) <-chan pubsub.Event[PermissionRequest] {
 	return s.broker.Subscribe(ctx)
 }
@@ -243,4 +373,16 @@ func SubscribeToRequests(ctx context.Context) <-chan pubsub.Event[PermissionRequ
 
 func SubscribeToResponses(ctx context.Context) <-chan pubsub.Event[PermissionResponse] {
 	return GetService().SubscribeToResponseEvents(ctx)
+}
+
+func SetPermissionPromptTool(ctx context.Context, sessionID string, tool Tool) {
+	GetService().SetPermissionPromptTool(ctx, sessionID, tool)
+}
+
+func GetPermissionPromptTool(ctx context.Context, sessionID string) (Tool, bool) {
+	return GetService().GetPermissionPromptTool(ctx, sessionID)
+}
+
+func ParseMCPResponse(ctx context.Context, response string) bool {
+	return GetService().ParseMCPResponse(ctx, response)
 }

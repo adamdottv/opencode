@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,11 +81,84 @@ func filterTools(allTools []tools.BaseTool, allowedTools, excludedTools []string
 	return filteredTools
 }
 
+// toolWrapper wraps tools.BaseTool to implement permission.Tool interface
+type toolWrapper struct {
+	tool tools.BaseTool
+}
+
+func (tw *toolWrapper) Info() permission.ToolInfo {
+	info := tw.tool.Info()
+	return permission.ToolInfo{
+		Name:        info.Name,
+		Description: info.Description,
+		Parameters:  info.Parameters,
+		Required:    info.Required,
+	}
+}
+
+func (tw *toolWrapper) Run(ctx context.Context, params permission.ToolCall) (permission.ToolResponse, error) {
+	toolsParams := tools.ToolCall{
+		ID:    params.ID,
+		Name:  params.Name,
+		Input: params.Input,
+	}
+	
+	result, err := tw.tool.Run(ctx, toolsParams)
+	if err != nil {
+		return permission.ToolResponse{}, err
+	}
+	
+	return permission.ToolResponse{
+		Type:     string(result.Type),
+		Content:  result.Content,
+		Metadata: result.Metadata,
+		IsError:  result.IsError,
+	}, nil
+}
+
+// findPermissionTool finds the specified permission prompt tool in the tools list
+func findPermissionTool(allTools []tools.BaseTool, permissionToolName string) (tools.BaseTool, string, error) {
+	// Parse the claude-code format mcp__{server}__{tool} to OpenCode format {server}_{tool}
+	if !strings.HasPrefix(permissionToolName, "mcp__") {
+		return nil, "", fmt.Errorf("invalid permission prompt tool format: %s (expected: mcp__{server}__{tool})", permissionToolName)
+	}
+	
+	// Remove "mcp__" prefix and convert "__" to "_"
+	parsed := strings.TrimPrefix(permissionToolName, "mcp__")
+	openCodeToolName := strings.Replace(parsed, "__", "_", 1)
+	
+	// Find the permission tool
+	var permissionTool tools.BaseTool
+	var availableMCPTools []string
+	
+	for _, tool := range allTools {
+		toolInfo := tool.Info()
+		// Check if this is an MCP tool (contains underscore indicating server_tool format)
+		if strings.Contains(toolInfo.Name, "_") {
+			availableMCPTools = append(availableMCPTools, "mcp__"+strings.Replace(toolInfo.Name, "_", "__", 1))
+			if toolInfo.Name == openCodeToolName {
+				permissionTool = tool
+			}
+		}
+	}
+	
+	if permissionTool == nil {
+		if len(availableMCPTools) == 0 {
+			return nil, "", fmt.Errorf("MCP tool %s (passed via --permission-prompt-tool) not found. Available MCP tools: none", permissionToolName)
+		}
+		return nil, "", fmt.Errorf("MCP tool %s (passed via --permission-prompt-tool) not found. Available MCP tools: %s", 
+			permissionToolName, strings.Join(availableMCPTools, ", "))
+	}
+	
+	slog.Info("Found permission prompt tool", "tool", permissionTool.Info().Name)
+	return permissionTool, openCodeToolName, nil
+}
+
 // handleNonInteractiveMode processes a single prompt in non-interactive mode
-func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, verbose bool, allowedTools, excludedTools []string) error {
+func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat format.OutputFormat, quiet bool, verbose bool, allowedTools, excludedTools []string, permissionPromptTool string) error {
 	// Initial log message using standard slog
 	slog.Info("Running in non-interactive mode", "prompt", prompt, "format", outputFormat, "quiet", quiet, "verbose", verbose,
-		"allowedTools", allowedTools, "excludedTools", excludedTools)
+		"allowedTools", allowedTools, "excludedTools", excludedTools, "permissionPromptTool", permissionPromptTool)
 
 	// Sanity check for mutually exclusive flags
 	if quiet && verbose {
@@ -161,8 +235,40 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 	// Set the session as current
 	app.CurrentSession = &session
 
-	// Auto-approve all permissions for this session
-	permission.AutoApproveSession(ctx, session.ID)
+	// Initialize MCP tools synchronously in non-interactive mode (if any are configured)
+	mcpServers := config.Get().MCPServers
+	if len(mcpServers) > 0 {
+		mcpCtx, mcpCancel := context.WithTimeout(ctx, 10*time.Second)
+		agent.GetMcpTools(mcpCtx, app.Permissions)
+		mcpCancel()
+	}
+
+	// Get all tools including MCP tools
+	allTools := agent.PrimaryAgentTools(
+		app.Permissions,
+		app.Sessions,
+		app.Messages,
+		app.History,
+		app.LSPClients,
+	)
+
+	// Handle permission prompt tool setup
+	if permissionPromptTool != "" {
+		// Find the permission tool
+		permissionTool, openCodeToolName, err := findPermissionTool(allTools, permissionPromptTool)
+		if err != nil {
+			return err
+		}
+		
+		// Store the permission tool for this session (wrapped to match interface)
+		permission.SetPermissionPromptTool(ctx, session.ID, &toolWrapper{tool: permissionTool})
+		
+		// Add permission tool to excluded tools so it gets filtered out of LLM tools
+		excludedTools = append(excludedTools, openCodeToolName)
+	} else {
+		// Auto-approve all permissions for this session (current behavior)
+		permission.AutoApproveSession(ctx, session.ID)
+	}
 
 	// Create the user message
 	_, err = app.Messages.Create(ctx, session.ID, message.CreateMessageParams{
@@ -175,21 +281,7 @@ func handleNonInteractiveMode(ctx context.Context, prompt string, outputFormat f
 
 	// If tool restrictions are specified, create a new agent with filtered tools
 	if len(allowedTools) > 0 || len(excludedTools) > 0 {
-		// Initialize MCP tools synchronously to ensure they're included in filtering
-		mcpCtx, mcpCancel := context.WithTimeout(ctx, 10*time.Second)
-		agent.GetMcpTools(mcpCtx, app.Permissions)
-		mcpCancel()
-
-		// Get all available tools including MCP tools
-		allTools := agent.PrimaryAgentTools(
-			app.Permissions,
-			app.Sessions,
-			app.Messages,
-			app.History,
-			app.LSPClients,
-		)
-
-		// Filter tools based on allowed/excluded lists
+		// Filter tools based on allowed/excluded lists (permission tool automatically excluded if present)
 		filteredTools := filterTools(allTools, allowedTools, excludedTools)
 
 		// Log the filtered tools for debugging
