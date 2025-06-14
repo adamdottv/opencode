@@ -2,14 +2,9 @@
 
 AI coding agent, built for the terminal.
 
-## Table of Contents
-
-- [Installation](#installation)
-- [Providers](#providers)
-
 ⚠️ **Note:** version 0.1.x is a full rewrite and we do not have proper documentation for it yet. Should have this out week of June 17th 2025 📚
 
-## Installation
+### Installation
 
 ```bash
 # YOLO
@@ -23,7 +18,7 @@ paru -S opencode-bin               # Arch Linux
 
 > **Note:** Remove previous versions < 0.1.x first if installed
 
-## Providers
+### Providers
 
 The recommended approach is to sign up for claude pro or max and do `opencode auth login` and select Anthropic. It is the most cost effective way to use this tool.
 
