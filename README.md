@@ -4,17 +4,17 @@ AI coding agent, built for the terminal.
 
 ⚠️ **Note:** version 0.1.x is a full rewrite and we do not have proper documentation for it yet. Should have this out week of June 17th 2025 📚
 
-## Installation
+### Installation
 
 If you have a previous version of opencode < 0.1.x installed you might have to remove it first.
 
-### Curl
+#### Curl
 
 ```
 curl -fsSL https://opencode.ai/install | bash
 ```
 
-### NPM
+#### NPM
 
 ```
 npm i -g opencode-ai@latest
@@ -23,21 +23,21 @@ pnpm i -g opencode-ai@latest
 yarn global add opencode-ai@latest
 ```
 
-### Brew
+#### Brew
 
 ```
 brew install sst/tap/opencode
 ```
 
-### AUR
+#### AUR
 
 ```
 paru -S opencode-bin
 ```
 
-## Usage
+### Usage
 
-### Providers
+#### Providers
 
 The recommended approach is to sign up for claude pro or max and do `opencode auth login` and select Anthropic. It is the most cost effective way to use this tool.
 
