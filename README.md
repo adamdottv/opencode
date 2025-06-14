@@ -43,6 +43,23 @@ The recommended approach is to sign up for claude pro or max and do `opencode au
 
 Additionally opencode is powered by the provider list at [models.dev](https://models.dev) so you can use `opencode auth login` to configure api keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`
 
+```bash
+$ opencode_local auth login
+
+┌  Add credential
+│
+◆  Select provider
+│  ● Anthropic (recommended)
+│  ○ OpenAI
+│  ○ Google
+│  ○ Amazon Bedrock
+│  ○ Azure
+│  ○ DeepSeek
+│  ○ Groq
+│  ...
+└
+```
+
 The models.dev dataset is also used to detect common environment variables like OPENAI_API_KEY to autoload that provider.
 
 If there are additional providers you want to use you can submit a PR to the [models.dev repo](https://github.com/sst/models.dev). If configuring just for yourself check out the Config section below
