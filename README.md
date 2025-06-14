@@ -2,49 +2,35 @@
 
 AI coding agent, built for the terminal.
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Providers](#providers)
+
 ⚠️ **Note:** version 0.1.x is a full rewrite and we do not have proper documentation for it yet. Should have this out week of June 17th 2025 📚
 
-### Installation
+## Installation
 
-If you have a previous version of opencode < 0.1.x installed you might have to remove it first.
-
-#### Curl
-
-```
+```bash
+# YOLO
 curl -fsSL https://opencode.ai/install | bash
+
+# Package managers
+npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+brew install sst/tap/opencode      # macOS
+paru -S opencode-bin               # Arch Linux
 ```
 
-#### NPM
+> **Note:** Remove previous versions < 0.1.x first if installed
 
-```
-npm i -g opencode-ai@latest
-bun i -g opencode-ai@latest
-pnpm i -g opencode-ai@latest
-yarn global add opencode-ai@latest
-```
-
-#### Brew
-
-```
-brew install sst/tap/opencode
-```
-
-#### AUR
-
-```
-paru -S opencode-bin
-```
-
-### Usage
-
-#### Providers
+## Providers
 
 The recommended approach is to sign up for claude pro or max and do `opencode auth login` and select Anthropic. It is the most cost effective way to use this tool.
 
 Additionally opencode is powered by the provider list at [models.dev](https://models.dev) so you can use `opencode auth login` to configure api keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`
 
 ```bash
-$ opencode_local auth login
+$ opencode auth login
 
 ┌  Add credential
 │
