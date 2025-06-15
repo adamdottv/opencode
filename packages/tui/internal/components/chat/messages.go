@@ -29,8 +29,10 @@ type messagesComponent struct {
 	cache           *MessageCache
 	tail            bool
 }
-type renderFinishedMsg struct{}
-type ToggleToolMessagesMsg struct{}
+type (
+	renderFinishedMsg     struct{}
+	ToggleToolMessagesMsg struct{}
+)
 
 type MessageKeys struct {
 	PageDown     key.Binding
@@ -147,7 +149,7 @@ func (m *messagesComponent) renderView() {
 		for _, p := range message.Parts {
 			part, err := p.ValueByDiscriminator()
 			if err != nil {
-				continue //TODO: handle error?
+				continue // TODO: handle error?
 			}
 
 			switch part.(type) {
@@ -242,16 +244,7 @@ func (m *messagesComponent) header() string {
 
 	t := theme.CurrentTheme()
 	width := layout.Current.Container.Width
-	base := styles.BaseStyle().Render
-	muted := styles.Muted().Render
-	headerLines := []string{}
-	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
-	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
-		headerLines = append(headerLines, muted(m.app.Session.Share.Url))
-	} else {
-		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
-	}
-	header := strings.Join(headerLines, "\n")
+	header := toMarkdown("# "+m.app.Session.Title, width-6, t.Background())
 
 	header = styles.BaseStyle().
 		Width(width).
